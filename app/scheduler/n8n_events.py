@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.database.models import AIUsage, ScheduledEvent, TaskProgress, UserSettings
-from app.learning.reports import progress_report
+from app.learning.lessons import TASKS
+from app.learning.reports import weekly_progress_report
 from app.learning.vocabulary import due_words
 
 EVENT_TYPES = {
@@ -48,15 +49,17 @@ def event_message(
                     TaskProgress.owner_id == owner_id,
                     TaskProgress.day_number == current_day,
                     TaskProgress.completed.is_(True),
+                    TaskProgress.task_key.in_([key for key, _, _ in TASKS]),
                 )
             )
         )
-        total = 8
-        remaining = max(0, total - len(completed))
-        if remaining == 0:
+        remaining = [(key, title) for key, title, _ in TASKS if key not in completed]
+        if not remaining:
             return None, "skipped"
+        titles = ", ".join(title for _, title in remaining[:3])
+        extra = f" и ещё {len(remaining) - 3}" if len(remaining) > 3 else ""
         return (
-            f"⏰ У вас осталось учебных блоков на сегодня: {remaining}. Откройте /lesson.",
+            f"⏰ Осталось блоков: {len(remaining)} — {titles}{extra}. Откройте /lesson.",
             "sent",
         )
     if event_type == "weekly_ielts_exam":
@@ -67,16 +70,22 @@ def event_message(
             "sent",
         )
     if event_type == "weekly_progress_report":
-        return "📊 <b>Еженедельный отчёт</b>\n" + escape(progress_report(session, owner_id)), "sent"
+        return (
+            "📊 <b>Еженедельный отчёт</b>\n" + escape(weekly_progress_report(session, owner_id)),
+            "sent",
+        )
     if event_type == "application_health_monitoring":
         return "⚠️ Мониторинг подтвердил проблему доступности приложения.", "sent"
     if event_type == "ai_budget_monitoring":
         month = datetime.now(UTC).strftime("%Y-%m")
-        spent = session.scalar(
-            select(func.coalesce(func.sum(AIUsage.actual_usd + AIUsage.reserved_usd), 0)).where(
-                AIUsage.owner_id == owner_id, AIUsage.month == month
+        spent = (
+            session.scalar(
+                select(func.coalesce(func.sum(AIUsage.actual_usd + AIUsage.reserved_usd), 0)).where(
+                    AIUsage.owner_id == owner_id, AIUsage.month == month
+                )
             )
-        ) or 0
+            or 0
+        )
         budget = settings.monthly_ai_budget_usd
         if budget <= 0 or float(spent) < budget * 0.8:
             return None, "skipped"
@@ -108,14 +117,17 @@ def reserve_event(
         raise RuntimeError("Scheduled event could not be reserved")
     if event.status in {"sent", "skipped", "sending"}:
         return event, False
-    result = cast(Any, session.execute(
-        update(ScheduledEvent)
-        .where(
-            ScheduledEvent.id == event.id,
-            ScheduledEvent.status.in_(("pending", "failed")),
-        )
-        .values(status="sending")
-    ))
+    result = cast(
+        Any,
+        session.execute(
+            update(ScheduledEvent)
+            .where(
+                ScheduledEvent.id == event.id,
+                ScheduledEvent.status.in_(("pending", "failed")),
+            )
+            .values(status="sending")
+        ),
+    )
     session.commit()
     if result.rowcount != 1:
         session.refresh(event)

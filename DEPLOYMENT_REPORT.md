@@ -50,3 +50,7 @@
 - n8n local health endpoint и приватный запрос из n8n в `http://ielts-webhook.railway.internal:8080/health` вернули HTTP 200.
 - Railway metrics за 1 час (61 samples): n8n RAM current 0.452 GB, max 0.874 GB; CPU current 0.0017, max 0.1745. Среднее RAM 0.077 GB и min 0 содержат интервалы до запуска n8n и не являются полезной steady-state оценкой. Пик выше 0.5 GB; для проверки бюджета нужно наблюдать дольше.
 - GitHub `main` commit `72c7f6` уже развернут; рабочее дерево чистое.
+
+## Реализация weekly logic
+
+Последнее изменение кода реализует недельный отчёт по событиям последних семи дней и формирует smart reminder из фактически незавершённых блоков. В Railway текущая ревизия этой правки ещё не выкатывалась на момент создания этого отчёта; после push проверить deployment и health.

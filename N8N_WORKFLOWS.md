@@ -58,3 +58,7 @@ Python event API развернут в commit `98088aa`; Railway webhook и cron
 ## Повторная runtime проверка (2026-10-14 14:49 UTC)
 
 n8n и Python Online, cron Ready. `/healthz` внутри n8n и Python private `/health` по адресу `ielts-webhook.railway.internal:8080` дали HTTP 200. Метрики n8n (окно 1 час, 61 samples): RAM 0.452 GB current / 0.874 GB max; CPU 0.0017 current / 0.1745 max. Окно содержит время до старта сервиса, поэтому среднее 0.077 GB и min 0 не отражают steady state. Owner setup и импорт шаблонов пока не выполнены; workflows оставлены выключенными.
+
+## Обновлённая логика расписаний
+
+Python формирует `weekly_progress_report` из фактических активностей за последние 7 дней: завершённые дни, личные слова, повторы, тесты, последнюю Writing оценку и слабую тему. `smart_reminders` перечисляет оставшиеся задания по тому же каталогу `TASKS`, что использует экран урока, и пропускает уведомление, если все блоки завершены. Unit-тесты покрывают границы недельного окна и оба сценария напоминания. Live доставка и импорт workflow ещё ожидают owner bootstrap и credentials.

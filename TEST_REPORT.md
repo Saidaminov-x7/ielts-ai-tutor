@@ -43,3 +43,11 @@
 - `scripts/scan_secrets.py`: вероятных hard-coded секретов не найдено; `git diff --check`: чисто.
 - После последнего кода deployment не проверялся до push; live Telegram доставка и n8n workflow E2E остаются непроверенными из-за отсутствующих owner credentials и bootstrap.
 
+
+## Telegram owner bootstrap (2026-10-14)
+
+- Добавлена команда `/whoami` для безопасного получения собственного Telegram ID, если bot token уже настроен, но owner ID ещё неизвестен.
+- До owner setup middleware пропускает только `/whoami` в личном чате; учебные команды и группы закрыты. После настройки owner ID эта команда тоже проходит обычную проверку владельца.
+- Добавлено три unit-теста: bootstrap в личном чате, блокировка группы и отсутствие обхода заданного owner ID.
+- Полный повторный прогон после этого изменения: `pytest -q` — **29 passed**; Ruff чист по `app/tests/migrations`; mypy проверенных модулей без ошибок; compileall и secret scan пройдены; `git diff --check` чист.
+

@@ -192,7 +192,7 @@ def create_app() -> web.Application:
     settings = get_settings()
     bot: Bot | None = None
     dispatcher: Dispatcher | None = None
-    if settings.telegram_bot_token and settings.owner_telegram_id:
+    if settings.telegram_bot_token:
         bot = Bot(
             token=settings.telegram_bot_token.get_secret_value(),
             default=DefaultBotProperties(parse_mode=ParseMode.HTML),
@@ -202,7 +202,7 @@ def create_app() -> web.Application:
         dispatcher.callback_query.outer_middleware(OwnerOnlyMiddleware())
         dispatcher.include_router(router)
     else:
-        logger.warning("Bot starts in setup mode; Telegram token and owner ID are not configured")
+        logger.warning("Telegram delivery is disabled until TELEGRAM_BOT_TOKEN is configured")
     app = web.Application(client_max_size=64 * 1024)
     app[STATE_KEY] = RuntimeState(bot=bot, dispatcher=dispatcher)
     if bot is not None and dispatcher is not None and settings.webhook_secret_token:

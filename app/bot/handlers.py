@@ -59,6 +59,19 @@ async def start(message: Message) -> None:
     )
 
 
+@router.message(Command("whoami"))
+async def whoami(message: Message) -> None:
+    if message.chat.type != "private" or message.from_user is None:
+        await answer(message, "Команда доступна только в личном чате с ботом.")
+        return
+    await answer(
+        message,
+        f"Ваш Telegram User ID: <code>{message.from_user.id}</code>\n"
+        "До настройки этого ID доступна только эта команда.",
+        parse_mode="HTML",
+    )
+
+
 @router.message(Command("menu"))
 async def menu(message: Message) -> None:
     await answer(message, "Главное меню:", reply_markup=MAIN_MENU)

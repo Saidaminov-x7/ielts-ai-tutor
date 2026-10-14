@@ -15,6 +15,7 @@
 - [x] Проверить Railway private networking из n8n: `ielts-webhook.railway.internal:8080/health` вернул HTTP 200; n8n `/healthz` также HTTP 200.
 - [x] Исправить недельный отчёт: он считает учебные события, повторы, тесты, личные слова, Writing и слабую тему только за последние 7 дней; добавить unit-тест.
 - [x] Исправить Smart Reminders: считать незавершённые блоки по фактическому списку заданий урока и показывать их названия; не использовать фиксированное предположение о 8 блоках.
+- [x] Добавить безопасный `/whoami` bootstrap: доступен только в личном чате до настройки owner ID; после настройки действует обычный owner-only middleware.
 - [ ] Создать owner account n8n в защищённой форме. Не публиковать публичный редактор до bootstrap владельца.
 - [ ] Завершить owner bootstrap и защитить self-hosted n8n Community, затем создать и проверить 8 workflows.
 - [x] Добавить защищённый Python endpoint для семи scheduled event типов и SQLite dedupe ledger; добавить миграцию и тесты. Daily Lesson использует существующий защищённый `/internal/daily`.
@@ -49,7 +50,7 @@
 
 - Этап 1: завершён. Рабочая папка была пуста, Git отсутствует; Python 3.12.7 доступен.
 - Реализованы и локально проверены: Python backend, aiogram handlers, SQLite, owner-only middleware, lessons, SRS, quiz, weekly exam, Writing examiner service, бюджетный guard, XLSX importer, сохранённые напоминания.
-- Последний локальный прогон после исправлений отчёта и напоминаний: 26 тестов проходят; Ruff чист по app/tests/migrations; mypy чист по проверенным модулям; compileall чист; сканер не нашёл вероятных hard-coded секретов.
+- Последний локальный прогон после исправлений отчёта, напоминаний и `/whoami`: 29 тестов проходят; Ruff чист по app/tests/migrations; mypy чист по проверенным модулям; compileall чист; сканер не нашёл вероятных hard-coded секретов.
 - Alembic initial migration для 12 таблиц добавлена; тест проверил создание схемы и повторный `upgrade head`; `init_db()` применил её к `data/ielts.db`.
 - Недостающий XLSX не был сконструирован. Код не содержит проверенных 182 уроков, 1750 слов и готовых материалов Reading/Listening.
 - В Railway отсутствуют `TELEGRAM_BOT_TOKEN`, `OWNER_TELEGRAM_ID`, `OPENAI_API_KEY`; живой Telegram/OpenAI smoke test не запускался. Python и n8n deployment проверены отдельно как `SUCCESS`.

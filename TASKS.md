@@ -11,7 +11,8 @@
 - [x] Создать `TEST_REPORT.md`, `SECURITY_REPORT.md`, `DEPLOYMENT_REPORT.md`, `N8N_WORKFLOWS.md`.
 - [x] Развернуть отдельный Railway сервис self-hosted n8n Community и persistent volume 1 GB; private networking, `ALWAYS` restart, sleep off, timezone Asia/Tashkent, encryption key и execution pruning настроены.
 - [x] Исправить права Railway volume через `RAILWAY_RUN_UID=0` после подтверждённого `EACCES`; повторный deployment `ee398c7c-d463-4949-b709-6209ce206e17` получил `SUCCESS`, миграции завершились, editor слушает `0.0.0.0:5678`.
-- [ ] Снять свежие метрики RAM/CPU/network не менее 10 минут. Предварительный короткий снимок сразу после запуска: текущее RAM около 60 MB, максимум около 147 MB; не считать устойчивым средним.
+- [x] Снять текущие метрики Railway после запуска: n8n RAM current ~452 MB, max ~874 MB за выборку 1 час; среднее ~77 MB искажено нулями до запуска, поэтому для оценки постоянной нагрузки использовать нельзя. CPU current ~0.0017, max ~0.1745.
+- [x] Проверить Railway private networking из n8n: `ielts-webhook.railway.internal:8080/health` вернул HTTP 200; n8n `/healthz` также HTTP 200.
 - [ ] Создать owner account n8n в защищённой форме. Не публиковать публичный редактор до bootstrap владельца.
 - [ ] Завершить owner bootstrap и защитить self-hosted n8n Community, затем создать и проверить 8 workflows.
 - [x] Добавить защищённый Python endpoint для семи scheduled event типов и SQLite dedupe ledger; добавить миграцию и тесты. Daily Lesson использует существующий защищённый `/internal/daily`.
@@ -26,7 +27,7 @@
 
 - n8n Cloud `saidaminov.app.n8n.cloud` показывает `Your trial is over`; апгрейд/оплата не выполнялись.
 - Railway workspace сейчас Hobby. Usage UI: $0.20 текущего resource usage, $5 included usage, $0.00 текущего счёта. Снимок периода Oct 11–Nov 11, не прогноз.
-- По ставкам Railway постоянно работающий n8n при 0.5 GB RAM обойдётся примерно в $5/месяц только за память, до CPU, storage и egress. Footprint инстанса не измерен.
+- По текущей выборке Railway n8n использовал до ~0.874 GB RAM; постоянная стоимость зависит от фактического распределения ресурса и тарификации Railway. Текущий пик превышает ориентир 0.5 GB, среднее выборки недостоверно из-за нулей до запуска.
 - n8n сейчас приватен и не имеет публичного домена. Безопасная первичная настройка требует, чтобы владелец создал пароль в защищённой форме; не открывать публичный незащищённый редактор и не вводить пароль вместо владельца.
 - GitHub browser попросил включить 2FA; коды не вводились. GitHub Actions отдельно заблокирован billing/spending-limit сообщением.
 

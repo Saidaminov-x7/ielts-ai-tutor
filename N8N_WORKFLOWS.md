@@ -54,3 +54,7 @@ Python event API развернут в commit `98088aa`; Railway webhook и cron
 1. Дать владельцу создать owner account в защищённой форме; до этого оставить n8n без публичного домена.
 2. После 10 минут стабильной работы измерить RAM/CPU/egress и сверить расходы с бюджетом; не менять Railway plan.
 3. Импортировать восемь workflows, настроить credentials и расписания, отключить прежний ежедневный Railway cron после включения workflow; провести E2E включая повторы и restart.
+
+## Повторная runtime проверка (2026-10-14 14:49 UTC)
+
+n8n и Python Online, cron Ready. `/healthz` внутри n8n и Python private `/health` по адресу `ielts-webhook.railway.internal:8080` дали HTTP 200. Метрики n8n (окно 1 час, 61 samples): RAM 0.452 GB current / 0.874 GB max; CPU 0.0017 current / 0.1745 max. Окно содержит время до старта сервиса, поэтому среднее 0.077 GB и min 0 не отражают steady state. Owner setup и импорт шаблонов пока не выполнены; workflows оставлены выключенными.

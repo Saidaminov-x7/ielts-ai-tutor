@@ -43,3 +43,10 @@
 3. Измерить расход n8n и сверить прогноз с лимитом ~$5/month без изменения Railway тарифа.
 4. Настроить проверенное резервное копирование и тест восстановления persistent volume.
 5. Повторить live Telegram/OpenAI smoke tests и E2E workflow tests после конфигурации.
+
+## Повторная проверка 2026-10-14 14:49 UTC
+
+- Текущий статус Railway environment: 3 сервиса, 0 критических/предупреждений и 0 недавних падений; Python Online, daily cron Ready, n8n Online. Активные deployment: webhook `8286e427-16c3-4702-bc84-d8e4cfbc5076`, cron `74e814f6-e500-4bcc-ac5c-53ea1d4fbf8d`, n8n `ee398c7c-d463-4949-b709-6209ce206e17` — все `SUCCESS`.
+- n8n local health endpoint и приватный запрос из n8n в `http://ielts-webhook.railway.internal:8080/health` вернули HTTP 200.
+- Railway metrics за 1 час (61 samples): n8n RAM current 0.452 GB, max 0.874 GB; CPU current 0.0017, max 0.1745. Среднее RAM 0.077 GB и min 0 содержат интервалы до запуска n8n и не являются полезной steady-state оценкой. Пик выше 0.5 GB; для проверки бюджета нужно наблюдать дольше.
+- GitHub `main` commit `72c7f6` уже развернут; рабочее дерево чистое.

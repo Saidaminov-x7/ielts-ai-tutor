@@ -28,6 +28,11 @@ def test_all_eight_workflow_exports_are_inactive_and_secret_free() -> None:
         workflow = json.loads((WORKFLOWS / filename).read_text(encoding="utf-8"))
         assert workflow["active"] is False
         assert all(node["type"] != "n8n-nodes-base.telegramTrigger" for node in workflow["nodes"])
+        node_names = {node["name"] for node in workflow["nodes"]}
+        assert set(workflow["connections"]).issubset(node_names)
+        for outputs in workflow["connections"].values():
+            for branch in outputs["main"]:
+                assert all(connection["node"] in node_names for connection in branch)
         assert workflow["settings"]["timezone"] == "Asia/Tashkent"
         assert workflow["settings"]["saveDataSuccessExecution"] == "none"
         assert workflow["settings"]["saveDataErrorExecution"] == "none"

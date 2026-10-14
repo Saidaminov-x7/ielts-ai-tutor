@@ -7,6 +7,6 @@ COPY app ./app
 COPY migrations ./migrations
 RUN pip install --no-cache-dir .
 RUN useradd --create-home --uid 10001 appuser && mkdir -p /data && chown appuser:appuser /data
-USER appuser
+ENTRYPOINT ["python", "-m", "app.container_entrypoint"]
 ENV DATABASE_URL=sqlite:////data/ielts.db
 CMD ["python", "-m", "app.main"]

@@ -9,8 +9,12 @@
 - [x] Проверить Railway проекты, workload, цену, sleep и health endpoint; посторонние проекты не менялись.
 - [x] После исправления прав `/data` оба IELTS Railway сервиса успешно развернулись; `/health` вернул HTTP 200.
 - [x] Создать `TEST_REPORT.md`, `SECURITY_REPORT.md`, `DEPLOYMENT_REPORT.md`, `N8N_WORKFLOWS.md`.
-- [ ] Развернуть и защитить self-hosted n8n Community, затем создать и проверить 8 workflows. Не публиковать n8n до bootstrap владельца и его пароля.
-- [ ] Связать workflows с авторизованными внутренними Python-операциями. Сейчас реализован только защищённый идемпотентный daily delivery; остальных event endpoints нет.
+- [x] Подготовить отдельный Railway сервис self-hosted n8n Community и 1 GB persistent volume в staged config; private networking label, `ALWAYS` restart, без сна, timezone Asia/Tashkent, encryption key и execution pruning заданы.
+- [ ] Применить deployment: Railway tool отклонил `accept_deploy` с сообщением `Cancelled — the user did not approve this action`; сервис и volume пока staged и не запущены. После успешного запуска замерить RAM/CPU/network не менее 10 минут.
+- [ ] Создать owner account n8n в защищённой форме. Не публиковать публичный редактор до bootstrap владельца.
+- [ ] Развернуть и защитить self-hosted n8n Community, затем создать и проверить 8 workflows.
+- [x] Добавить защищённый Python endpoint для семи scheduled event типов и SQLite dedupe ledger; добавить миграцию и тесты. Daily Lesson использует существующий защищённый `/internal/daily`.
+- [ ] Создать восемь workflows на self-hosted n8n, настроить internal credential, расписания и E2E после owner bootstrap.
 - [ ] Владелец должен добавить bot token, numeric owner ID и OpenAI API key в Railway Variables, передать исходный XLSX и создать owner password n8n через защищённую веб-форму.
 - [ ] Проверить Telegram, Writing API, все 11 функций, восстановление volume и workflow E2E после подключения нужных материалов и credentials.
 - [ ] После снятия GitHub billing restriction повторить remote CI и secret scan.

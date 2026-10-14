@@ -17,6 +17,7 @@ from app.bot.handlers import router
 from app.config import get_settings
 from app.database.models import CourseDay, DailyDelivery, UserSettings, Vocabulary
 from app.database.session import SessionLocal, init_db
+from app.scheduler.n8n_events import EVENT_TYPES, event_message, finish_event, reserve_event
 from app.security.authentication import OwnerOnlyMiddleware
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -108,6 +109,50 @@ async def daily_delivery(request: web.Request) -> web.Response:
     return web.json_response({"status": "sent", "day": course_day, "words": len(vocabulary)})
 
 
+async def scheduled_event(request: web.Request) -> web.Response:
+    settings = get_settings()
+    provided = request.headers.get("X-Daily-Job-Secret", "")
+    expected = settings.daily_job_secret.get_secret_value() if settings.daily_job_secret else ""
+    if len(expected) < 32 or not hmac.compare_digest(provided, expected):
+        raise web.HTTPForbidden(text="Forbidden")
+    bot = request.app[STATE_KEY].bot
+    owner_id = settings.owner_telegram_id
+    if bot is None or owner_id is None:
+        raise web.HTTPServiceUnavailable(text="Bot is not configured")
+    try:
+        payload = await request.json()
+        event_type = payload["event_type"]
+        event_day = datetime.strptime(payload["event_date"], "%Y-%m-%d").date()
+    except (KeyError, TypeError, ValueError):
+        raise web.HTTPBadRequest(text="Invalid event payload") from None
+    if not isinstance(event_type, str) or event_type not in EVENT_TYPES:
+        raise web.HTTPBadRequest(text="Unsupported event type")
+
+    with SessionLocal() as session:
+        event, claimed = reserve_event(session, event_type, event_day)
+        if not claimed:
+            return web.json_response({"status": "already_processed"})
+        try:
+            message, status = event_message(session, event_type, owner_id, settings)
+            if status == "skipped":
+                finish_event(session, event, "skipped")
+                return web.json_response({"status": "skipped"})
+            if message is None:
+                finish_event(session, event, "skipped")
+                return web.json_response({"status": "skipped"})
+            await bot.send_message(owner_id, message)
+            finish_event(session, event, "sent")
+        except TelegramAPIError:
+            logger.exception("Scheduled Telegram event failed")
+            finish_event(session, event, "failed")
+            return web.json_response({"status": "delivery_failed"}, status=502)
+        except Exception:
+            logger.exception("Scheduled event processing failed")
+            finish_event(session, event, "failed")
+            return web.json_response({"status": "event_failed"}, status=500)
+    return web.json_response({"status": "sent", "event_type": event_type})
+
+
 async def startup(app: web.Application) -> None:
     init_db()
     settings = get_settings()
@@ -168,6 +213,7 @@ def create_app() -> web.Application:
         ).register(app, path="/telegram")
     app.router.add_get("/health", health)
     app.router.add_post("/internal/daily", daily_delivery)
+    app.router.add_post("/internal/scheduled-event", scheduled_event)
     app.on_startup.append(startup)
     app.on_cleanup.append(cleanup)
     return app

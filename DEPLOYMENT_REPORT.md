@@ -25,6 +25,9 @@
 - `OPENAI_API_KEY` не настроен, поэтому Writing Examiner не прошёл live API smoke test.
 - Railway resource ставки: $10/GB RAM-месяц, $20/vCPU-месяц, $0.15/GB volume-месяц. Постоянные 0.5 GB RAM дают около $5/месяц только за память; фактическое потребление и стоимость n8n ещё не измерены.
 - n8n Cloud `saidaminov.app.n8n.cloud` показывает `Your trial is over`; апгрейд не оформлялся.
+- Self-hosted n8n Community сервис `ielts-n8n` (Docker image `n8nio/n8n:latest`) и volume `ielts-n8n-data` (1 GB) подготовлены как staged Railway changes в проекте IELTS. Конфигурация: регион sfo, один экземпляр, sleep выключен, restart ALWAYS, постоянное хранение `/home/node/.n8n`, timezone Asia/Tashkent, отдельный encryption key и execution pruning.
+- Вызов Railway `accept_deploy` отклонён автоматическим review с текстом `Cancelled — the user did not approve this action`. Текущая конфигурация production не изменилась: сервис n8n не запущен и публичного домена нет. Секреты n8n остаются в staged Railway Variables и не показаны в отчёте.
+- Получен живой 24-часовой snapshot памяти Python webhook: average 0.0047 GB, max 0.2524 GB, current 0.2313 GB; это не метрика n8n. Для ежедневного trigger все метрики были нулевыми в срезе. Фактическая память n8n измерима только после его deployment.
 
 ## Следующие действия
 

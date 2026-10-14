@@ -90,6 +90,17 @@ class DailyDelivery(Base):
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
+class ScheduledEvent(Base):
+    __tablename__ = "scheduled_events"
+    __table_args__ = (UniqueConstraint("event_key", name="uq_scheduled_event_key"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_key: Mapped[str] = mapped_column(String(80), index=True)
+    event_type: Mapped[str] = mapped_column(String(40), index=True)
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class TaskProgress(Base):
     __tablename__ = "task_progress"
     __table_args__ = (

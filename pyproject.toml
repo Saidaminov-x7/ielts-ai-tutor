@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ielts-ai-tutor"
+version = "0.1.0"
+description = "Private Telegram IELTS Academic tutor"
+requires-python = ">=3.12"
+dependencies = ["aiogram>=3.7,<4", "aiohttp>=3.9,<4", "SQLAlchemy>=2,<3", "alembic>=1.13,<2", "APScheduler>=3.10,<4", "openai>=1.30,<3", "pydantic-settings>=2,<3", "openpyxl>=3.1,<4"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "ruff>=0.6", "mypy>=1.10"]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

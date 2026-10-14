@@ -9,16 +9,16 @@
 - [x] Проверить Railway проекты, workload, цену, sleep и health endpoint; посторонние проекты не менялись.
 - [x] После исправления прав `/data` оба IELTS Railway сервиса успешно развернулись; `/health` вернул HTTP 200.
 - [x] Создать `TEST_REPORT.md`, `SECURITY_REPORT.md`, `DEPLOYMENT_REPORT.md`, `N8N_WORKFLOWS.md`.
-- [x] Подготовить отдельный Railway сервис self-hosted n8n Community и 1 GB persistent volume в staged config; private networking label, `ALWAYS` restart, без сна, timezone Asia/Tashkent, encryption key и execution pruning заданы.
-- [ ] Применить deployment: Railway tool отклонил `accept_deploy` с сообщением `Cancelled — the user did not approve this action`; сервис и volume пока staged и не запущены. После успешного запуска замерить RAM/CPU/network не менее 10 минут.
+- [x] Развернуть отдельный Railway сервис self-hosted n8n Community и persistent volume 1 GB; private networking, `ALWAYS` restart, sleep off, timezone Asia/Tashkent, encryption key и execution pruning настроены.
+- [x] Исправить права Railway volume через `RAILWAY_RUN_UID=0` после подтверждённого `EACCES`; повторный deployment `ee398c7c-d463-4949-b709-6209ce206e17` получил `SUCCESS`, миграции завершились, editor слушает `0.0.0.0:5678`.
+- [ ] Снять свежие метрики RAM/CPU/network не менее 10 минут. Предварительный короткий снимок сразу после запуска: текущее RAM около 60 MB, максимум около 147 MB; не считать устойчивым средним.
 - [ ] Создать owner account n8n в защищённой форме. Не публиковать публичный редактор до bootstrap владельца.
-- [ ] Развернуть и защитить self-hosted n8n Community, затем создать и проверить 8 workflows.
+- [ ] Завершить owner bootstrap и защитить self-hosted n8n Community, затем создать и проверить 8 workflows.
 - [x] Добавить защищённый Python endpoint для семи scheduled event типов и SQLite dedupe ledger; добавить миграцию и тесты. Daily Lesson использует существующий защищённый `/internal/daily`.
 - [x] Подготовить восемь экспортируемых JSON-шаблонов n8n с расписанием Asia/Tashkent; шаблоны inactive, не содержат секретов и используют только Python API.
 - [x] Добавить проверки полноты workflow exports, timezone, inactivity и отсутствия секретов; `pytest -q` — 23 passed.
 - [ ] Создать восемь workflows на self-hosted n8n, настроить internal credential, расписания и E2E после owner bootstrap.
 - [ ] Владелец должен добавить bot token, numeric owner ID и OpenAI API key в Railway Variables, передать исходный XLSX и создать owner password n8n через защищённую веб-форму.
-- [ ] Устранить Railway approval gate: `accept_deploy` автоматически возвращает `Cancelled — the user did not approve this action`; staged patch `bce5013c-09eb-4f93-9bdb-5640cd3dadb9` не применён, доступная безопасная альтернатива для обхода отсутствует.
 - [ ] Проверить Telegram, Writing API, все 11 функций, восстановление volume и workflow E2E после подключения нужных материалов и credentials.
 - [ ] После снятия GitHub billing restriction повторить remote CI и secret scan.
 
@@ -27,7 +27,7 @@
 - n8n Cloud `saidaminov.app.n8n.cloud` показывает `Your trial is over`; апгрейд/оплата не выполнялись.
 - Railway workspace сейчас Hobby. Usage UI: $0.20 текущего resource usage, $5 included usage, $0.00 текущего счёта. Снимок периода Oct 11–Nov 11, не прогноз.
 - По ставкам Railway постоянно работающий n8n при 0.5 GB RAM обойдётся примерно в $5/месяц только за память, до CPU, storage и egress. Footprint инстанса не измерен.
-- Безопасная первичная настройка n8n требует владельца и его пароля. Не создавать публичный незащищённый редактор и не вводить пароль вместо владельца.
+- n8n сейчас приватен и не имеет публичного домена. Безопасная первичная настройка требует, чтобы владелец создал пароль в защищённой форме; не открывать публичный незащищённый редактор и не вводить пароль вместо владельца.
 - GitHub browser попросил включить 2FA; коды не вводились. GitHub Actions отдельно заблокирован billing/spending-limit сообщением.
 
 ## План

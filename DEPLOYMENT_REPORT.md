@@ -16,7 +16,10 @@
 - Оба последних deployment имеют статус `SUCCESS`.
 - Live `GET /health`: HTTP 200 `{"status":"ok"}`.
 - Usage UI на дату проверки: Hobby, $0.20 текущего resource usage, $5 included usage, $0.00 current bill. Это снимок периода Oct 11–Nov 11, не месячный прогноз.
-- В Railway проекте нет n8n-сервиса. Другие проекты и службы не менялись.
+- Self-hosted n8n Community `ielts-n8n` развернут в том же проекте как Docker image `n8nio/n8n:latest`, production region `sfo`, 1 GB volume `/home/node/.n8n`, private/unexposed service, `ALWAYS` restart, sleep disabled. Успешный deployment: `ee398c7c-d463-4949-b709-6209ce206e17`; runtime reports n8n 2.43.5 and successful migrations.
+- Первоначальный запуск показал `EACCES` на volume; Railway variable `RAILWAY_RUN_UID=0` исправил доступ согласно Railway volume permissions guidance. Перезапуск успешен, публичный домен не создавался.
+- Короткий metrics snapshot после старта: RAM current ~60 MB, max ~147 MB; среднее и min искажены предыдущими нулевыми интервалами до запуска. Это не 10-минутный steady-state замер. Выборка ещё не достаточна для точной оценки месячной стоимости.
+- В Railway проекте размещён только предназначенный IELTS n8n сервис; другие проекты и службы не менялись.
 
 ## Данные и работа приложения
 
@@ -27,9 +30,9 @@
 - n8n Cloud `saidaminov.app.n8n.cloud` показывает `Your trial is over`; апгрейд не оформлялся.
 - Python integration commit `98088aa` запушен в `main`; Railway webhook deployment `b19a6de1-f992-49bf-9fbc-f90a94ae9fe6` и daily trigger `33860a39-2663-4a93-9e67-0b6a48ada079` получили `SUCCESS` на этом SHA.
 - Live smoke: `/health` вернул HTTP 200; POST `/internal/scheduled-event` с неверным внутренним секретом вернул HTTP 403. Валидный production event не отправлялся.
-- Self-hosted n8n Community сервис `ielts-n8n` (Docker image `n8nio/n8n:latest`) и volume `ielts-n8n-data` (1 GB) подготовлены как staged Railway changes в проекте IELTS. Конфигурация: регион sfo, один экземпляр, sleep выключен, restart ALWAYS, постоянное хранение `/home/node/.n8n`, timezone Asia/Tashkent, отдельный encryption key и execution pruning.
-- Вызов Railway `accept_deploy` отклонён автоматическим review с текстом `Cancelled — the user did not approve this action`. Текущая конфигурация production не изменилась: сервис n8n не запущен и публичного домена нет. Секреты n8n остаются в staged Railway Variables и не показаны в отчёте.
-- Railway metrics для staged `ielts-n8n` за последний час: память 0.000 GB average/current, CPU 0.000. Это подтверждает отсутствие работающего процесса, но не измеряет фактическую память n8n.
+- Первичный n8n deployment упал из-за volume permission `EACCES`; UI Railway использован для подтверждённого пользователем применения настроек и повторного запуска. После добавления `RAILWAY_RUN_UID=0` deployment `ee398c7c-d463-4949-b709-6209ce206e17` получил `SUCCESS`, n8n 2.43.5 завершил миграции и слушает порт 5678.
+- На 2026-10-14 14:42 UTC короткий metrics snapshot после запуска: RAM current 0.060 GB, max 0.147 GB. Усреднение за час содержит интервалы до deployment, поэтому точное устойчивое среднее ещё не установлено; собрать не менее 10 минут свежих метрик.
+- Публичного домена нет; owner bootstrap, workflow import и credentials остаются невыполненными. Секретные значения не читались и не помещались в отчёт.
 - В репозитории созданы восемь неактивных JSON-экспортов workflows в `n8n/workflows/`; тесты шаблонов проходят вместе с приложением (`pytest -q`: 23 passed), `scripts/scan_secrets.py` не обнаружил вероятных секретов. Шаблоны пока не импортированы в Railway n8n.
 - Получен живой 24-часовой snapshot памяти Python webhook: average 0.0047 GB, max 0.2524 GB, current 0.2313 GB; это не метрика n8n. Для ежедневного trigger все метрики были нулевыми в срезе. Фактическая память n8n измерима только после его deployment.
 

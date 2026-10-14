@@ -1,6 +1,6 @@
 # n8n workflow inventory and plan
 
-Проверено 2026-10-14. n8n Community для Railway подготовлен отдельным сервисом, но пока не запущен. В репозитории подготовлены восемь inactive workflow exports в `n8n/workflows/`; они ещё не импортированы в живой экземпляр.
+Проверено 2026-10-14. Self-hosted n8n Community развернут отдельным Railway сервисом; восемь inactive workflow exports в `n8n/workflows/` ещё не импортированы.
 
 ## Состояние найденных экземпляров
 
@@ -9,10 +9,11 @@
 - Visible credential metadata: `Telegram account` (`telegramApi`) и `Header Auth account` (`httpHeaderAuth`). Значения не запрашивались; назначение и валидность для IELTS неизвестны.
 - Cloud UI instance `saidaminov.app.n8n.cloud` показывает `Your trial is over`; платная подписка не оформлялась.
 - n8n Cloud `saidaminov.app.n8n.cloud` показывает завершившийся trial и в self-hosted архитектуре не используется.
-- Для Railway подготовлен staged сервис `ielts-n8n` из Docker image `n8nio/n8n:latest` и отдельный persistent volume 1 GB на `/home/node/.n8n`. Сервис размещается в `sfo` рядом с Python webhook, без публичного домена, с `ALWAYS` restart и выключенным sleep.
-- В staged variables настроены ключ шифрования credentials, `Asia/Tashkent`, отключённая диагностика, и pruning execution данных. Значения секретов не помещены в Git или этот документ.
-- Railway отклонил попытку применить staged deployment: ответ инструмента — `Cancelled — the user did not approve this action`. Сервис и том остаются staged и не потребляют ресурсы; живого n8n процесса пока нет.
-- После запуска измерить метрики Railway (memory current/average/max, CPU, network) не менее 10 минут; до этого фактическое потребление памяти неизвестно. 0.5 GB в прежней оценке — тарифное допущение, а не замер.
+- Railway service `ielts-n8n` использует Docker image `n8nio/n8n:latest` и persistent volume 1 GB на `/home/node/.n8n`, регион `sfo`, без публичного домена, `ALWAYS` restart и выключенный sleep. Deployment `ee398c7c-d463-4949-b709-6209ce206e17` имеет `SUCCESS`; n8n 2.43.5 завершил миграции и слушает порт 5678.
+- Первый запуск завершился `EACCES` при записи `/home/node/.n8n/config`, потому что Railway монтирует volume от root, а образ n8n по умолчанию работает как non-root. Добавлен Railway variable `RAILWAY_RUN_UID=0` согласно Railway volumes docs; новый deployment стартовал без этой ошибки. Это увеличивает привилегии процесса внутри контейнера.
+- В Railway Variables настроены ключ шифрования credentials, `Asia/Tashkent`, отключённая диагностика, execution pruning и UID volume runtime. Значения секретов не помещены в Git или этот документ.
+- Startup log подтвердил готовность редактора; публичный домен не создавался, editor остаётся private. В логах есть предупреждение, что Python task runner не доступен в image; текущие workflow exports используют HTTP Request nodes и не нуждаются в Python runner.
+- Короткий предварительный Railway metrics snapshot сразу после запуска: RAM current около 60 MB, max около 147 MB; выборка содержит нули до успешного запуска, поэтому её нельзя считать устойчивым средним. Снять свежую метрику после 10 минут стабильной работы.
 
 ## Планируемые workflows
 
@@ -50,6 +51,6 @@ Python event API развернут в commit `98088aa`; Railway webhook и cron
 
 ## Необходимое продолжение
 
-1. Применить staged сервис n8n Community после успешного одобрения deployment; затем создать owner account в защищённом UI до публикации редактора.
-2. После запуска измерить RAM/CPU/egress минимум 10 минут и сверить расходы с бюджетом ~$5/month; не менять Railway plan.
-3. Создать восемь workflows, настроить расписания и провести E2E включая повторное выполнение и restart.
+1. Дать владельцу создать owner account в защищённой форме; до этого оставить n8n без публичного домена.
+2. После 10 минут стабильной работы измерить RAM/CPU/egress и сверить расходы с бюджетом; не менять Railway plan.
+3. Импортировать восемь workflows, настроить credentials и расписания, отключить прежний ежедневный Railway cron после включения workflow; провести E2E включая повторы и restart.

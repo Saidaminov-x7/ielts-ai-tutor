@@ -20,7 +20,7 @@
 - GitHub Actions и удалённый secret scan остаются непроверенными, поскольку jobs не стартовали. Повторить после устранения GitHub billing restriction.
 - У Railway persistent volume нет проверенной резервной копии и теста восстановления.
 - n8n Cloud instance имеет существующие Telegram/Header Auth credentials, но их срок действия, sharing scopes, encryption-at-rest и владелец неизвестны. Значения не экспортировались.
-- Self-hosted n8n подготовлен staged, но не развернут; deployment blocked by Railway automatic review. Публичный домен не создавался до ручного owner setup.
+- Self-hosted n8n Community развернут private/unexposed, постоянный volume и encryption key заданы. После `EACCES` на volume добавлен `RAILWAY_RUN_UID=0`, что запускает весь контейнерный процесс с UID 0; это рабочая настройка Railway, но повышает привилегии внутри контейнера. Публичный домен не создавался до owner bootstrap.
 - Workflow должен передавать только event type и дату через private networking; не передавать в n8n эссе, сообщения или промпты. Secret хранить как n8n credential, не включать его в workflow JSON.
 - Логи Railway и ограничение webhook payload не доказывают отсутствие всех утечек. Внешний penetration test и проверка логов n8n не проводились.
 

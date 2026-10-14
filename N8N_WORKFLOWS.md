@@ -1,5 +1,30 @@
 # n8n workflow inventory and plan
 
+## Fresh live inventory (2026-10-14 22:29 Asia/Tashkent)
+
+- Railway n8n is online on persistent volume `/home/node/.n8n`; HTTPS `/healthz` returned 200. SQLite contains one inactive `Daily IELTS Lesson` workflow and no credential records.
+- Owner record exists and is enabled. Chrome password autofill is empty; do not reset/re-register. Visual editor operations require the owner to enter the password manually.
+- The similar public-settings `planName` crash reported upstream was fixed before deployed version 2.43.5 (PR #35281), so the current auth/session failure needs fresh browser evidence and is not attributed to that older bug.
+- Railway recorded `browserId check failed` on workflow/settings endpoints. A clean isolated sign-in tab is prepared to remove the stale browser binding; it still requires the owner to sign in before visual workflow edits can continue.
+- `Daily IELTS Lesson` is incomplete: its Schedule Trigger has no interval. Keep Railway `ielts-daily-trigger` at `0 19 * * *` UTC until the replacement workflow is saved and passes delivery/deduplication tests.
+- The other seven requested workflows are not created. No workflow execution or notification was verified. Live Telegram/OpenAI testing is blocked pending credential rotation/configuration.
+
+## Fresh live checkpoint (2026-10-14 21:36 Asia/Tashkent)
+
+- The Railway n8n login succeeded once (HTTP 200) and the editor loaded. A later workflow save failed with HTTP 401, and subsequent login attempts returned 401. Because the successful login is recorded, do not assume the password itself is the only problem; diagnose session/cookie/proxy behavior before another reset.
+- Runtime version is 2.43.5. The public settings response lacks optional license fields, but n8n merged a frontend guard for that shape in release 2.34; there is not enough evidence to blame the response shape. Railway did log `browserId check failed` on the earlier session. The user cannot currently re-enter credentials in the clean isolated context, so do not reset the existing owner.
+- The visual editor opened `Daily IELTS Lesson`; 19:00 was selected in the Schedule Trigger, but the session expired before the save was accepted. A fresh CLI export from the persistent Railway database confirms no change: one inactive workflow, interval `[{}]`, no executions. No workflows were activated or created beyond that saved draft.
+- The workflow's HTTP node still uses the internal webhook URL and a `DAILY_JOB_SECRET` expression (the secret value was never exported or printed). Keep the existing Railway cron enabled to avoid losing daily delivery.
+- The API log sample contains only one client IP among 501 detailed rows, with the observed 401/502 requests corresponding to this browser/editor activity and push/health reconnects. No unexpected outside source was observed in that sample.
+- Blockers: stable owner session; missing Telegram/OpenAI owner credentials for live delivery; course workbook absent. The Python service has no Telegram token, owner Telegram ID, or OpenAI API key by variable name.
+- `n8n audit` reports the HTTP Request node as an official risky node because it can make arbitrary requests; it is required for private Python event calls and remains editable only through authenticated n8n. Audit also found community-node installation enabled and the authenticated public API enabled. Deployment `0bd24930-58c6-4322-a9ab-c734b0769b23` is now `SUCCESS`; repeat audit confirms community-package installation is disabled.
+
+## Post-recovery checkpoint (2026-10-14 21:30 Asia/Tashkent)
+
+- Owner setup succeeded, but interactive sign-in still returns 401 after using the registered email. The user must manually re-enter the owner password; no more attempts/resets until then.
+- One stored workflow only: `Daily IELTS Lesson`, inactive. Its HTTP Request targets Python's private `/internal/daily` endpoint and uses an env expression for `DAILY_JOB_SECRET`. The Schedule Trigger interval is empty; configure it before any test or activation.
+- No Telegram/OpenAI credentials are present in n8n, and there are no saved credential rows. Seven workflows are not yet created. Do not disable the separate Railway cron before replacement is verified.
+
 ## Live state (2026-10-14 21:20 Asia/Tashkent)
 
 - Read-only inspection of Railway's persistent SQLite database found one inactive `Daily IELTS Lesson` workflow: Schedule Trigger and HTTP Request nodes. It survived `n8n user-management:reset`.
@@ -78,3 +103,8 @@ n8n и Python Online, cron Ready. `/healthz` внутри n8n и Python private 
 ## Обновлённая логика расписаний
 
 Python формирует `weekly_progress_report` из фактических активностей за последние 7 дней: завершённые дни, личные слова, повторы, тесты, последнюю Writing оценку и слабую тему. `smart_reminders` перечисляет оставшиеся задания по тому же каталогу `TASKS`, что использует экран урока, и пропускает уведомление, если все блоки завершены. Unit-тесты покрывают границы недельного окна и оба сценария напоминания. Live доставка и импорт workflow ещё ожидают owner bootstrap и credentials.
+# Latest checkpoint — 2026-10-14
+
+The owner said they cannot enter the password right now. No additional reset or registration was attempted. Railway currently reports n8n deployment `0bd24930-58c6-4322-a9ab-c734b0769b23` as `SUCCESS`, with the 1 GB `ielts-n8n-data` volume mounted at `/home/node/.n8n`. This confirms service health and persistent-volume configuration, not successful owner login or database persistence.
+
+The existing `Daily IELTS Lesson` workflow remains inactive. Its configured schedule was not saved, it has no verified execution, and it must not be activated while the Railway `ielts-daily-trigger` cron (`0 19 * * *`) remains in place. The requested eight workflows have not been fully built or E2E tested. Continue only after owner authentication works in the editor; build them visually as requested, then test deduplication and notification results before considering any change to the existing cron.

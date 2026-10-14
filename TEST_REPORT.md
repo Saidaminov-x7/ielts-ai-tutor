@@ -1,5 +1,41 @@
 # IELTS AI Tutor — тестовый отчёт
 
+## Fresh code verification (2026-10-14 22:59 Asia/Tashkent)
+
+- `pytest -q`: **35 passed**, включая проверку сохранения последнего SRS-ответа и регистрации обязательных slash-команд.
+- `ruff check app tests scripts migrations`: clean; `mypy app`: no issues; `python -m compileall -q app`: clean.
+- `scripts/scan_secrets.py`: no likely hard-coded secrets; `git diff --check`: clean.
+- Проверки выполнены на локальном коде. Изменения ещё не развёрнуты в Railway; реальные Telegram/OpenAI/n8n UI E2E остаются заблокированы отсутствующими credentials и входом в n8n.
+
+## Fresh verification (2026-10-14 22:29 Asia/Tashkent)
+
+- Earlier local run: `pytest -q`: **32 passed**. Current run and added coverage are in the checkpoint above.
+- Live `GET https://ielts-webhook-production.up.railway.app/health`: HTTP 200. Live `GET https://ielts-n8n-production.up.railway.app/healthz`: HTTP 200.
+- Railway environment health: 3 services, 0 with issues, 0 recent failures; n8n online, webhook sleeping, daily trigger ready.
+- Traffic snapshot: n8n 930 requests/24h (8 5xx) and 166/last hour (1 5xx); webhook 19/24h (1 5xx); cron no public HTTP requests. This aggregate check does not identify request source; previous bounded log sample correlated the burst with owner's browser session.
+- Detailed last-hour n8n HTTP logs: 133 rows, all from one client source; 10 login 401s, one 502, one 403, and one status-0 connection among the rows. No client address or sensitive headers were retained.
+- Read-only n8n database metadata: one active owner account, one inactive workflow, zero credentials. No password hash or personal account fields were read. Chrome password autofill is empty, so no login or workflow execution could be tested in this turn.
+- Upstream issue #35194 describes a similar optional `license.planName` settings crash, fixed by PR #35281 before deployed n8n 2.43.5. It is not evidence of this instance's current cause; the prior browserId warning and current 401s remain unresolved without a real authenticated browser trace.
+- Follow-up Railway runtime logs confirm `browserId check failed` on workflow/settings requests. A fresh isolated Chrome sign-in context now has a new browser ID and no saved password. This may clear a stale browser/session binding; success still requires owner login and has not yet been verified.
+- Functional limitations remain: n8n draft has an empty schedule interval; seven required workflows are absent; Telegram/OpenAI credentials are absent by name; real bot delivery and full end-to-end function coverage remain unverified.
+
+## Fresh verification (2026-10-14 21:36 Asia/Tashkent)
+
+- Local: `pytest -q` **32 passed**; `ruff check app tests scripts migrations` clean; `scripts/scan_secrets.py` found no likely hard-coded secrets; `git diff --check` clean.
+- n8n UI: Chrome recorded a successful login (HTTP 200), but a later workflow-save request returned 401 and subsequent login attempts returned 401. The visual schedule selection was not saved. A fresh Railway CLI export confirms the only workflow remains inactive with an empty interval; no n8n execution or notification was tested.
+- Runtime version is 2.43.5; Railway also logged `browserId check failed` for the earlier session. The public `/rest/settings` response lacks optional license fields, but the matching frontend guard shipped in n8n 2.34, so the response shape is not sufficient to identify a root cause. The user cannot re-enter credentials in the clean isolated context right now.
+- Railway n8n last-hour sample: 583 requests, 5 5xx (4 `/rest/push`/`/healthz` reconnect/startup responses), 54 4xx. In 501 detailed log entries all requests came from one client IP; 401s aligned with this browser session. No unexplained client source was found in the sample.
+- Current n8n memory: 0.584 GB; 1-hour max 0.663 GB. The Python webhook is `SLEEPING`; the daily trigger remains active on its existing schedule.
+- Live Telegram, OpenAI, positive internal event delivery, and all eight n8n end-to-end workflows remain untested because required Python service variables are absent and n8n session authorization is unstable.
+- `n8n audit` ran through the service CLI. It flagged the required built-in HTTP Request node as potentially capable of arbitrary host/network requests and noted community-package installation and authenticated public API settings. `N8N_COMMUNITY_PACKAGES_ENABLED=false` deployment reached `SUCCESS`; a repeat audit showed community packages disabled, and `/healthz` returned 200.
+
+## Post-deploy smoke checks (2026-10-14 21:30 Asia/Tashkent)
+
+- Railway deployment for exact SHA `7fb241ac28abb0b16f314a0e5dfc1a048a8bed02`: webhook `SUCCESS`; daily-trigger `SUCCESS`.
+- Live `GET /health`: HTTP 200 after cold wake.
+- Live POST to protected `/internal/scheduled-event` without auth: HTTP 403; unauthorized event rejected.
+- n8n visual workflow execution not tested: owner setup succeeded but interactive login currently fails after correcting the sign-in email. The one saved workflow remains inactive and its schedule interval is empty.
+
 ## Latest verification (2026-10-14)
 
 - `pytest -q`: **32 passed** (rerun 2026-10-14).

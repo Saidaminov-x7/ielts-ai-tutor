@@ -2,7 +2,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from openpyxl import load_workbook
+from openpyxl import load_workbook  # type: ignore[import-untyped]
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 

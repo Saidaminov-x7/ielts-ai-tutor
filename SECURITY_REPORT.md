@@ -1,5 +1,27 @@
 # IELTS AI Tutor — security report
 
+## Fresh security checkpoint (2026-10-14 22:29 Asia/Tashkent)
+
+- Local secret scan found no likely hard-coded secrets in project text files. This does not cover Git history, Railway variable values, browser storage, or prior chat content.
+- Railway service descriptions exposed variable names only. The webhook service still lacks `TELEGRAM_BOT_TOKEN`, `OWNER_TELEGRAM_ID`, and `OPENAI_API_KEY`. Values were not read. The previously exposed Telegram token must be revoked before enabling delivery.
+- Read-only n8n metadata confirms one active owner account and zero stored n8n credential rows. Password/hash, email, and encryption-key values were not read.
+- n8n is owner-authenticated, has a persistent volume, and is served over HTTPS. Public health endpoints returned 200; private/internal auth and live event delivery were not tested in this turn.
+- Railway aggregate traffic for the last 24 hours: n8n 930 (8 5xx), webhook 19 (1 5xx); no unknown client source can be inferred from aggregate counts alone. The previous detailed log sample tied the browser burst to one client, but this remains a bounded observation, not a guarantee.
+- Latest detailed n8n HTTP logs cover one hour and 133 rows from one client source; paths are mainly `/healthz`, `/rest/login`, and `/rest/settings`. The sample does not show a separate high-volume client; no IP address or secret header was copied into the report.
+- Chrome's isolated sign-in form had no password autofill. No login was attempted, no account reset was repeated, and no credential was exposed. Workflow security review remains pending until visual editor access returns.
+- The upstream n8n public-settings `planName` crash was fixed before 2.43.5 (PR #35281); it should not be claimed as the cause here. Diagnosing the remaining 401/browserId session issue needs a user-entered login and browser console/network evidence; no auth bypass was applied.
+- Railway runtime logs do confirm browser-ID validation failures on settings and workflow requests. A separate isolated Chrome context is prepared with fresh site storage; it does not expose or alter account credentials and does not affect n8n's persistent database.
+
+## Fresh security/runtime checkpoint (2026-10-14 21:36 Asia/Tashkent)
+
+- Source scan rerun: no likely hard-coded secrets; `git diff --check` clean. This does not inspect Git history, browser storage, prior chat content, or unseen Railway variables.
+- Railway `describe_service` was used to read variable names only. The webhook service does not have variable names `TELEGRAM_BOT_TOKEN`, `OWNER_TELEGRAM_ID`, or `OPENAI_API_KEY`; values of existing secrets were not read.
+- The exposed Telegram token must be revoked and replaced before any live delivery test; no token was used in this run. Live OpenAI/Telegram tests are unavailable until owner credentials are added directly in Railway.
+- n8n remains protected by owner sign-in. A successful HTTP 200 login was followed by an editor-save 401 and subsequent login 401s. This is an unresolved session/authentication issue; no auth reset was repeated and no workflow was activated.
+- In the latest bounded request sample, all 501 detailed n8n HTTP log entries used one client IP; 401s and transient push/health 502s aligned with the browser/editor session. This is not proof against future or unobserved traffic.
+- The built-in `n8n audit` command completed. It flagged the workflow's HTTP Request node as an official risky node because that node can make arbitrary requests; this workflow uses it only for the private Python endpoint. It reported community packages enabled despite no package use; `N8N_COMMUNITY_PACKAGES_ENABLED=false` is deployed and a repeat audit confirms it is disabled. It also reports the authenticated public API enabled, which remains a configuration item to review. No credential-value finding was printed.
+- n8n login remains unresolved: a prior successful login was followed by a workflow-save 401, and Railway logged `browserId check failed`. The deployed version is 2.43.5; a current upstream fix for absent optional license settings was released in 2.34, so the response omission alone is not treated as the root cause. No additional owner reset or browser-id security bypass was applied.
+
 ## Latest checks (2026-10-14)
 
 - `scripts/scan_secrets.py` found no likely hard-coded secrets in project text files. `git diff --check` is clean. This is a source scan, not proof that no secret was ever exposed in chat, browser history, Railway logs, or Git history.
@@ -45,3 +67,9 @@
 - Экранируются строки из учебных данных, словаря, журнала ошибок и модели перед отправкой в Telegram с глобальным HTML parse mode.
 - Добавлен regression-тест со строками, похожими на HTML/script; результат проверен с Telegram-safe escaped markup.
 - Полный прогон после изменений: 31 тест passed; Ruff чист; mypy проверенных модулей чист; compileall и секрет-скан пройдены.
+# Latest checkpoint — 2026-10-14
+
+- The owner cannot enter the n8n password at this time. No password was read or copied, and no further reset or login attempt was made. The n8n editor remains protected by authentication.
+- Current Railway configuration lists a stable n8n data volume at `/home/node/.n8n`, and the latest n8n deployment is `SUCCESS`. This does not prove owner login or successful recovery after restart.
+- Current environment snapshot lists names only; no variable values were read. The webhook service still lacks `TELEGRAM_BOT_TOKEN`, `OWNER_TELEGRAM_ID`, and `OPENAI_API_KEY`. The previously exposed Telegram token must be revoked and replaced before any live delivery.
+- Prior source scan and bounded log review are limited checks; they do not prove absence of exposure in Git history, browser state, or uninspected logs. No full security-audit claim is made.

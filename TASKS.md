@@ -1,5 +1,48 @@
 # IELTS AI Tutor — план и статус
 
+## Fresh code checkpoint (2026-10-14 22:59 Asia/Tashkent)
+
+- Исправлена потеря последнего ответа в SRS: финальный callback теперь коммитит ответ, журнал активности, курсор и streak. Добавлен regression test.
+- Добавлены slash-команды `/help`, `/today`, `/words`, `/review`, `/test`, `/writing`, `/progress`, `/mistakes`, `/settings`, использующие те же обработчики, что и кнопки меню. `/time` теперь валидирует время через `strptime`.
+- Устранены mypy-ошибки в POSIX entrypoint и явно помечены зависимости без опубликованных type stubs.
+- Локальная проверка: `pytest -q` **35 passed**; Ruff clean; mypy clean; compileall clean; secret scan clean; `git diff --check` clean.
+- Эти изменения пока локальные и ещё не развернуты. Следующий шаг — commit/push в приватный `main` и проверка Railway webhook/cron deployment. n8n workflow automation остаётся ограничена входом владельца в чистой Chrome-вкладке и отсутствующими Telegram/OpenAI credentials/course workbook.
+
+## Fresh live checkpoint (2026-10-14 22:29 Asia/Tashkent)
+
+- Railway production inventory rechecked: `ielts-n8n` online (`0bd24930-58c6-4322-a9ab-c734b0769b23`), `ielts-webhook` sleeping with `/data` volume, and `ielts-daily-trigger` ready on `0 19 * * *` UTC. Railway reports 0 service issues, 0 recent failures, and no pending changes.
+- n8n SQLite is on the persistent `/home/node/.n8n` volume. Read-only metadata confirms one active `global:owner` account with a password configured and one saved workflow; no credential rows. Password/hash/email were not read. Chrome's isolated n8n sign-in has no saved password, so do not reset or re-register the owner again.
+- Auth investigation: upstream n8n issue #35194 describes a similar settings-store crash when public `/rest/settings` omits `license.planName`, but its fix (#35281) was merged and released before the deployed 2.43.5 version. Therefore this issue is not established as the current root cause; the earlier `browserId check failed` log and repeated 401s still need an authenticated browser console/network trace to diagnose.
+- Follow-up log inspection confirms Railway recorded `browserId check failed` on `/rest/workflows/:workflowId` and `/rest/settings` during the reported session. Prepared a new isolated Chrome sign-in context with a freshly generated browser ID and no saved password. This safely avoids stale browser storage/cookies; the owner still must enter the existing account credentials once. No reset or auth bypass was applied.
+- Only one workflow exists: inactive `Daily IELTS Lesson`; its Schedule Trigger is incomplete (`[{}]`). Keep the existing daily-trigger service enabled until an n8n replacement is saved, tested, and deduplication is proven. The other seven workflows remain uncreated.
+- Fresh 24h traffic: n8n 930 requests (647 2xx, 211 3xx, 64 4xx, 8 5xx), webhook 19 (12 2xx, 6 4xx, 1 5xx), daily-trigger 0 public requests. The last-hour n8n sample is 166 requests with 1 5xx; no unexplained external client was established from aggregate metrics. These short-window metrics are not proof against future traffic.
+- Bounded detailed n8n HTTP logs (last 60 minutes) returned 133 rows from one client source: 80×200, 40×304, 10×401, 1×403, 1×502, and 1 status-0 connection. The busiest paths were `/healthz` (32), `/rest/login` (9), and `/rest/settings` (7). This matches browser/editor activity in the sample; no client addresses were copied into reports.
+- Latest health probes returned HTTP 200 for n8n `/healthz` and Python `/health`. Railway 24h health overview reports no deployment failures. RAM: n8n ~0.441 GB current / 0.874 GB max; sleeping webhook ~0.213 GB current / 0.459 GB max; cron idle at zero.
+- Local verification: `pytest -q` 32 passed; Ruff clean; secret scanner found no likely hard-coded secrets. A first health-probe command failed due to PowerShell quoting, then the corrected probe succeeded. `git diff --check` still needs a final run after these documentation edits.
+- Still blocked: stable n8n owner login requires the account owner to enter the password in Chrome; user said they cannot do so right now. Live Telegram/OpenAI remain blocked until the exposed Telegram token is rotated and replacement credentials are added directly to Railway. No credentials were viewed or tested.
+- Next: when the owner can sign in, save and test workflows visually in n8n; verify internal call, state, idempotency, and notification; only then consider switching off the Railway daily trigger. Do not reset the existing owner again.
+
+## Fresh live checkpoint (2026-10-14 21:36 Asia/Tashkent)
+
+- n8n accepted an owner login once (`POST /rest/login` HTTP 200 at 16:29 UTC; `GET /rest/login` 200 at 16:31 UTC), then the editor save returned HTTP 401 at 16:34 UTC. Later sign-in attempts returned 401. This points to an expiring/invalid session or proxy/auth issue; it is not evidence that the user's password was wrong. No more resets or guessed password attempts.
+- Deployed n8n version is 2.43.5. `/rest/settings` omits optional license fields, but the matching n8n frontend fix was merged and released in 2.34; that response shape alone does not prove this is the cause. Railway did log `browserId check failed` during the earlier session. A clean isolated sign-in page is prepared; the user cannot re-enter credentials right now, so owner login remains unresolved.
+- The n8n editor showed the one `Daily IELTS Lesson` graph. A visual attempt to set 19:00 could not be saved before the session expired. A fresh export from the Railway volume confirms it is still inactive with `Schedule Trigger` interval `[{}]`; no other workflows exist. The old Railway daily trigger remains active at `0 19 * * *` UTC, so duplicate notifications were not introduced.
+- Current Railway HTTP sample for n8n: 583 requests in the last hour (370 2xx, 154 3xx, 54 4xx, 5 5xx). Of 501 detailed log rows, all used one client IP; 4 5xx were `/rest/push` or `/healthz` 502s during connection/restart behavior. The 401s match the user's n8n login/editor session activity. No unexplained external client source appeared in this sample; this is a point-in-time check.
+- Current n8n RAM is 0.584 GB (1-hour max 0.663 GB); it must stay awake to run n8n schedules. The Python webhook is configured for Railway sleep and is currently `SLEEPING`; daily-trigger is successful and idle between its cron runs.
+- Railway variable names show `TELEGRAM_BOT_TOKEN`, `OWNER_TELEGRAM_ID`, and `OPENAI_API_KEY` are not configured on the Python service. Thus real Telegram/OpenAI delivery and cost tests remain blocked. The exposed old Telegram token must be revoked/rotated before enabling delivery.
+- Rerun checks: `pytest -q` 32 passed; Ruff clean; `scripts/scan_secrets.py` found no likely hard-coded secrets; `git diff --check` clean. Changes in this checkpoint are documentation only and are not deployed.
+- `n8n audit` completed. It flagged the built-in HTTP Request node as generally capable of arbitrary network access (required for the private Python API), and reported community-node installation enabled. Set `N8N_COMMUNITY_PACKAGES_ENABLED=false`; deployment `0bd24930-58c6-4322-a9ab-c734b0769b23` reached `SUCCESS`, `/healthz` returned 200, and a repeat audit confirmed community packages disabled. The audit also reports the authenticated public API enabled; no workflow credentials or unsafe webhook were reported.
+- Next: diagnose n8n session/proxy behavior without resetting the owner; once a stable authenticated session is available, save/test workflows visually. Only switch off the existing daily trigger after end-to-end delivery and idempotency pass.
+
+## Latest live checkpoint (2026-10-14 21:30 Asia/Tashkent)
+
+- Committed and pushed all reviewed local work to the private GitHub repo `Saidaminov-x7/ielts-ai-tutor`, commit `7fb241a` (`main`). GitHub API reports `private=true`.
+- Railway webhook and daily-trigger deployments both built from exact SHA `7fb241ac28abb0b16f314a0e5dfc1a048a8bed02` and reached `SUCCESS`. Live webhook `/health` returned HTTP 200 after waking; unauthenticated `/internal/scheduled-event` returned HTTP 403, confirming the secret gate rejects unauthorized calls.
+- Owner setup returned HTTP 200, but sign-in failed after the correct registered email was filled (the browser's previously prefilled email did not match the owner row). Do not make further login attempts until the user manually re-enters the chosen password. No password was read.
+- n8n contains one inactive incomplete `Daily IELTS Lesson` workflow: Schedule Trigger interval is empty; HTTP Request points to private `POST /internal/daily` and references the Railway secret via expression. It has not been run. Other seven workflows remain uncreated.
+- Current local checks: 32 pytest passed, Ruff clean, secret scanner clean, diff check clean before commit. Google Sheets instructions are in `GOOGLE_SHEETS_INTEGRATION.md`; direct Sheets API sync is not implemented yet. The source 182-day course workbook is still absent.
+- Next: after successful owner login, configure and test the existing daily workflow, then create remaining workflows and verify deduplication, persistence and delivery. Keep the old daily cron until the new workflow passes.
+
 ## Latest live checkpoint (2026-10-14 21:20 Asia/Tashkent)
 
 - The user-authorized `n8n user-management:reset` completed. The user then created the owner via Chrome; Railway logged `POST /rest/owner/setup` HTTP 200 and SQLite shows email/password fields present (their values were not read). n8n redirects to `/signin`; the user needs to sign in directly before editing. Do not reset again.
@@ -65,7 +108,7 @@ Latest n8n blocker: after redeploy Chrome returned to `/setup`. Persistent volum
 - [x] Исправить недельный отчёт: он считает учебные события, повторы, тесты, личные слова, Writing и слабую тему только за последние 7 дней; добавить unit-тест.
 - [x] Исправить Smart Reminders: считать незавершённые блоки по фактическому списку заданий урока и показывать их названия; не использовать фиксированное предположение о 8 блоках.
 - [x] Добавить безопасный `/whoami` bootstrap: доступен только в личном чате до настройки owner ID; после настройки действует обычный owner-only middleware.
-- [ ] Повторно создать owner account в форме `/setup` после явного привязывания папки n8n к volume; пользователь должен ввести собственный пароль в Chrome.
+- [x] Owner account сохранён в persistent volume; повторная регистрация не нужна. Остаётся войти в чистой вкладке Chrome с паролем, который знает только владелец.
 - [ ] После входа вручную собрать 8 визуальных workflows в n8n и проверить их; не импортировать JSON.
 - [x] Добавить защищённый Python endpoint для семи scheduled event типов и SQLite dedupe ledger; добавить миграцию и тесты. Daily Lesson использует существующий защищённый `/internal/daily`.
 - [x] Подготовить восемь экспортируемых JSON-шаблонов n8n с расписанием Asia/Tashkent; шаблоны inactive, не содержат секретов и используют только Python API.
@@ -105,3 +148,12 @@ Latest n8n blocker: after redeploy Chrome returned to `/setup`. Persistent volum
 - В Railway отсутствуют `TELEGRAM_BOT_TOKEN`, `OWNER_TELEGRAM_ID`, `OPENAI_API_KEY`; живой Telegram/OpenAI smoke test не запускался. Python и n8n deployment проверены отдельно как `SUCCESS`.
 - Остались внешние блокировки для полного acceptance: владелец должен предоставить/настроить Telegram и OpenAI credentials и исходную книгу; создать owner account n8n через защищённую форму. После этого нужно выполнить Telegram/n8n/OpenAI E2E, подтвердить все 182 дня и исходные слова, проверить резервное копирование/восстановление и переход legacy `create_all` БД на миграции.
 
+# Checkpoint — 2026-10-14  (n8n owner access paused)
+
+- The owner replied that they cannot enter the n8n password right now. No further password-reset command, account creation, or login attempt was performed. The clean Chrome sign-in tab remains the next user-dependent step.
+- Live Railway snapshot: `ielts-webhook` is `SLEEPING` with its `/data` persistent volume; `ielts-daily-trigger` is `SUCCESS` on `0 19 * * *`; `ielts-n8n` is `SUCCESS` with `ielts-n8n-data` mounted at `/home/node/.n8n`. No staged Railway work exists.
+- n8n remains inaccessible to workflow editing without owner authentication. Its one existing `Daily IELTS Lesson` workflow remains inactive and unverified; do not activate it or create duplicate schedules. The Railway daily cron remains the only verified scheduled deployment.
+- Local verification was rerun: 32 pytest tests pass, Ruff is clean, secret scan reports no likely hard-coded secrets, and `git diff --check` is clean.
+- Fresh live audit at 16:46 UTC rechecked all 3 Railway services and one-hour metrics/logs. n8n's capped sample had a 146-request/minute peak during Chrome editor load, all rows shared one client IP, 5 transient 502s, and continued login 401s. See `RAILWAY_AUDIT.md`; no unexplained multi-source burst was evident in the inspected sample.
+- At 16:48 UTC, Railway aggregate request metrics independently confirmed 486 n8n requests / 1h (5xx 1.03%), 930 / 24h (5xx 0.86%), peak bucket 145/min at Chrome page load. Recent deploy logs say n8n 2.43.5 is ready; sign-in still requires owner input. Longer-term spike baseline is not yet available because the deployment is new.
+- Remaining: owner sign-in/persistence check; visually build and E2E-check the requested n8n workflows; rotate exposed Telegram token and set required credentials directly in Railway; source workbook import and full live Telegram/OpenAI validation.

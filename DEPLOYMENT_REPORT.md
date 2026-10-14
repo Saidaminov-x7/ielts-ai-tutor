@@ -1,5 +1,29 @@
 # IELTS AI Tutor — deployment report
 
+## Fresh live checkpoint (2026-10-14 22:29 Asia/Tashkent)
+
+- Railway production has three services and no pending changes: `ielts-n8n` online (`0bd24930-58c6-4322-a9ab-c734b0769b23`), `ielts-webhook` sleeping, and `ielts-daily-trigger` ready on `0 19 * * *` UTC. Platform overview reports zero current issues and zero recent failures.
+- n8n is `n8nio/n8n:latest`, domain `https://ielts-n8n-production.up.railway.app`, one replica, 1 GB persistent volume at `/home/node/.n8n`. The Python webhook has a 1 GB volume at `/data` and Railway sleep enabled.
+- Live health checks: n8n `/healthz` HTTP 200; webhook `/health` HTTP 200. Owner record persists in n8n SQLite. Chrome had no saved password, so owner login could not be retried and no workflow was edited or executed.
+- Current 24h request counts: n8n 930, webhook 19, daily-trigger 0 public requests. Last-hour n8n count: 166. Resource snapshot: n8n 0.441 GB RAM now (0.874 GB max/24h); webhook 0.213 GB now (0.459 GB max/24h); cron idle at zero.
+- Telegram/OpenAI live operation remains unavailable because the webhook lacks those variable names; the previously exposed Telegram token must be rotated first. The persistent code deployment is not the same as a fully configured live tutor.
+
+## Fresh live checkpoint (2026-10-14 21:36 Asia/Tashkent)
+
+- Three Railway services were rechecked: n8n deployment `03fe6ffd-a4dd-4609-afab-5810edb45444` is `SUCCESS`; Python webhook deployment is `SLEEPING`; daily-trigger deployment is `SUCCESS` at `0 19 * * *` UTC. Both Python services use the private GitHub repo on exact SHA `7fb241ac28abb0b16f314a0e5dfc1a048a8bed02`; n8n is the official `n8nio/n8n:latest` image with a 1 GB persistent volume at `/home/node/.n8n`.
+- n8n owner login returned HTTP 200 once, then a workflow save returned 401 and later logins returned 401. The n8n CLI export confirms the daily draft still has an empty schedule interval. No workflow was activated; existing daily cron was left running.
+- Runtime version is 2.43.5. Railway logged a `browserId check failed` during the previous browser session; the owner is not reset. A clean isolated sign-in page is ready, but the user cannot re-enter credentials at present.
+- The Python service's configured variable names omit `TELEGRAM_BOT_TOKEN`, `OWNER_TELEGRAM_ID`, and `OPENAI_API_KEY`; live delivery and AI tests cannot run until the owner adds replacement credentials directly in Railway. Do not use the previously exposed Telegram token.
+- Last-hour n8n metrics: RAM 0.584 GB current, 0.663 GB max; HTTP totals 583 (370 2xx, 154 3xx, 54 4xx, 5 5xx). These values are a snapshot, not a cost forecast.
+- `n8n audit` was run through Railway SSH. The community package option was enabled with no community nodes found in use; disabled it using `N8N_COMMUNITY_PACKAGES_ENABLED=false`. Deployment `0bd24930-58c6-4322-a9ab-c734b0769b23` reached `SUCCESS`, `/healthz` returned 200, and a repeat audit confirmed the setting is active.
+
+## Production deploy follow-up (2026-10-14 21:30 Asia/Tashkent)
+
+- Private repo verified: `Saidaminov-x7/ielts-ai-tutor`. Pushed commit `7fb241a`; Railway webhook and daily-trigger each deployed the exact commit successfully.
+- Live webhook checks after deploy: `/health` → HTTP 200 (cold wake succeeded); unauthenticated `/internal/scheduled-event` → HTTP 403 (expected access control).
+- n8n deployment remains successful on its persistent volume. Owner registration is saved, but the login form's old prefilled email was mismatched; after correcting the email, login still returned 401. Password remains private and needs manual re-entry by the owner. No further retries or resets.
+- The one saved Daily IELTS Lesson workflow is inactive and incomplete because its Schedule Trigger interval is empty. No n8n automation is claimed as live.
+
 ## Follow-up verification (2026-10-14 21:20 Asia/Tashkent)
 
 - After repeated `401` sign-in responses, the authorized reset completed and the owner recreated the account in Chrome; the Railway log records HTTP 200 for `/rest/owner/setup`. The app now redirects to `/signin`; user must sign in directly. No password was read or entered by the assistant.
@@ -80,3 +104,8 @@ Current Railway check (2026-10-14): see [RAILWAY_AUDIT.md](RAILWAY_AUDIT.md) for
 ## Реализация weekly logic
 
 Последнее изменение кода реализует недельный отчёт по событиям последних семи дней и формирует smart reminder из фактически незавершённых блоков. В Railway текущая ревизия этой правки ещё не выкатывалась на момент создания этого отчёта; после push проверить deployment и health.
+# Latest live status — 2026-10-14
+
+Railway production environment has no pending changes. `ielts-webhook` is `SLEEPING` (persistent volume `/data`), `ielts-daily-trigger` is `SUCCESS` with cron `0 19 * * *`, and `ielts-n8n` is `SUCCESS` (deployment `0bd24930-58c6-4322-a9ab-c734b0769b23`, persistent volume `/home/node/.n8n`). The n8n domain is reachable, but owner sign-in/editor access is still blocked; the owner said they cannot enter the password now. No workflows were activated and no additional reset was attempted. This is a deployment health snapshot, not proof of complete application functionality.
+
+At 16:46 UTC, one-hour metrics showed n8n memory 0.413–0.663 GB (current 0.437 GB) and average CPU ~0.023 core. The bounded HTTP-log sample peaked at 146 requests/minute during a Chrome editor load, with 501 returned entries all from one client IP; 5 HTTP 502 responses were associated with `/rest/push` or `/healthz` during the redeploy window. The full request sample and limitations are in `RAILWAY_AUDIT.md`.

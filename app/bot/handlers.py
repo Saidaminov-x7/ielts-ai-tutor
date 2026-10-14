@@ -1,6 +1,7 @@
 import json
-from datetime import date
+from datetime import date, datetime
 from html import escape
+from types import SimpleNamespace
 
 from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
@@ -252,6 +253,8 @@ async def review_answer_callback(callback: CallbackQuery) -> None:
         word = session.get(Vocabulary, ids[cursor])
         if word is None:
             review_session.cursor += 1
+            if review_session.cursor >= len(ids):
+                review_session.completed = True
             session.commit()
             await callback.answer("Слово недоступно.")
             return
@@ -274,6 +277,9 @@ async def review_answer_callback(callback: CallbackQuery) -> None:
                 settings.streak = max(settings.streak, 1)
                 settings.max_streak = max(settings.max_streak, settings.streak)
                 session.add(settings)
+            # record_review commits the vocabulary row before Activity and the
+            # review cursor are added. Persist the terminal callback explicitly.
+            session.commit()
             await callback.answer(
                 "Повторение завершено." if correct else f"Правильный перевод: {word.translation}"
             )
@@ -565,12 +571,11 @@ async def quiet(message: Message) -> None:
 async def change_time(message: Message) -> None:
     value = (message.text or "").partition(" ")[2].strip()
     try:
-        date.fromisoformat("2020-01-01")
-        hour, minute = map(int, value.split(":"))
-        assert 0 <= hour <= 23 and 0 <= minute <= 59
-    except (ValueError, AssertionError):
+        parsed = datetime.strptime(value, "%H:%M")
+    except ValueError:
         await answer(message, "Формат времени: /time 19:00")
         return
+    hour, minute = parsed.hour, parsed.minute
     with SessionLocal() as session:
         uid = owner_id(message.from_user)
         row = session.get(UserSettings, uid) or UserSettings(
@@ -582,3 +587,69 @@ async def change_time(message: Message) -> None:
     await answer(
         message, f"Время напоминаний установлено: {hour:02d}:{minute:02d} (Asia/Tashkent)."
     )
+
+
+async def _command_callback_ack(*_args, **_kwargs) -> None:
+    """Callback handlers can share their tested behavior with slash commands."""
+
+
+def _command_as_callback(message: Message, data: str) -> SimpleNamespace:
+    return SimpleNamespace(
+        from_user=message.from_user,
+        message=message,
+        data=data,
+        answer=_command_callback_ack,
+    )
+
+
+@router.message(Command("help"))
+async def help_command(message: Message) -> None:
+    await answer(
+        message,
+        "Команды IELTS Tutor:\n"
+        "/today — урок дня\n/words — личный словарь\n/review — повторение слов\n"
+        "/test — ежедневный мини-тест\n/writing — проверка Writing\n"
+        "/progress — прогресс\n/mistakes — журнал ошибок\n/settings — настройки\n"
+        "/menu — главное меню",
+        reply_markup=MAIN_MENU,
+    )
+
+
+@router.message(Command("today"))
+async def today_command(message: Message) -> None:
+    await lesson(_command_as_callback(message, "lesson"))
+
+
+@router.message(Command("words"))
+async def words_command(message: Message) -> None:
+    await words(_command_as_callback(message, "words"))
+
+
+@router.message(Command("review"))
+async def review_command(message: Message) -> None:
+    await review(_command_as_callback(message, "review"))
+
+
+@router.message(Command("test"))
+async def test_command(message: Message) -> None:
+    await quiz(_command_as_callback(message, "quiz"))
+
+
+@router.message(Command("writing"))
+async def writing_command(message: Message, state: FSMContext) -> None:
+    await writing_start(_command_as_callback(message, "writing"), state)
+
+
+@router.message(Command("progress"))
+async def progress_command(message: Message) -> None:
+    await progress(_command_as_callback(message, "progress"))
+
+
+@router.message(Command("mistakes"))
+async def mistakes_command(message: Message) -> None:
+    await errors(_command_as_callback(message, "errors"))
+
+
+@router.message(Command("settings"))
+async def settings_command(message: Message) -> None:
+    await settings_menu(_command_as_callback(message, "settings"))

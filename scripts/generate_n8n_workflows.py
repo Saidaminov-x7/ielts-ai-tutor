@@ -60,12 +60,18 @@ def http_node(name: str, path: str, event_type: str | None) -> dict[str, object]
     parameters: dict[str, object] = {
         "method": "POST",
         "url": PYTHON_URL + path,
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": True,
+        "headerParameters": {
+            "parameters": [{"name": "X-Daily-Job-Secret", "value": "={{ $env.DAILY_JOB_SECRET }}"}]
+        },
         "options": {"timeout": 15000},
     }
     if event_type is not None:
-        body = "={{ JSON.stringify({event_type: '" + event_type + "', event_date: $now.setZone('Asia/Tashkent').toISODate()}) }}"
+        body = (
+            "={{ JSON.stringify({event_type: '"
+            + event_type
+            + "', event_date: $now.setZone('Asia/Tashkent').toISODate()}) }}"
+        )
         parameters.update({"sendBody": True, "specifyBody": "json", "jsonBody": body})
     return {
         "parameters": parameters,
@@ -77,7 +83,9 @@ def http_node(name: str, path: str, event_type: str | None) -> dict[str, object]
     }
 
 
-def scheduled_workflow(name: str, slug: str, cron: str, path: str, event: str | None) -> dict[str, object]:
+def scheduled_workflow(
+    name: str, slug: str, cron: str, path: str, event: str | None
+) -> dict[str, object]:
     trigger = {
         "parameters": {"rule": {"interval": [{"field": "cronExpression", "expression": cron}]}},
         "id": slug + "-schedule",
@@ -90,9 +98,16 @@ def scheduled_workflow(name: str, slug: str, cron: str, path: str, event: str | 
     return {
         "name": name,
         "nodes": [trigger, request],
-        "connections": {"Schedule": {"main": [[{"node": request["name"], "type": "main", "index": 0}]]}},
+        "connections": {
+            "Schedule": {"main": [[{"node": request["name"], "type": "main", "index": 0}]]}
+        },
         "active": False,
-        "settings": {"executionOrder": "v1", "timezone": "Asia/Tashkent", "saveDataErrorExecution": "none", "saveDataSuccessExecution": "none"},
+        "settings": {
+            "executionOrder": "v1",
+            "timezone": "Asia/Tashkent",
+            "saveDataErrorExecution": "none",
+            "saveDataSuccessExecution": "none",
+        },
         "versionId": slug + "-initial",
         "meta": {"templateCredsSetupCompleted": False},
         "tags": [],
@@ -101,7 +116,11 @@ def scheduled_workflow(name: str, slug: str, cron: str, path: str, event: str | 
 
 def health_workflow() -> dict[str, object]:
     schedule = {
-        "parameters": {"rule": {"interval": [{"field": "cronExpression", "expression": "0 */30 * * *"}]}},
+        # Keep wake-ups low: Railway sleeps the Python service while idle, so a
+        # frequent probe would defeat the requested on-demand behavior.
+        "parameters": {
+            "rule": {"interval": [{"field": "cronExpression", "expression": "0 3 * * *"}]}
+        },
         "id": "health-schedule",
         "name": "Schedule",
         "type": "n8n-nodes-base.scheduleTrigger",
@@ -111,7 +130,16 @@ def health_workflow() -> dict[str, object]:
     check = {
         "parameters": {
             "url": PYTHON_URL + "/health",
-            "options": {"timeout": 10000, "response": {"response": {"neverError": True, "responseFormat": "json", "includeResponseHeadersAndStatus": True}}},
+            "options": {
+                "timeout": 10000,
+                "response": {
+                    "response": {
+                        "neverError": True,
+                        "responseFormat": "json",
+                        "includeResponseHeadersAndStatus": True,
+                    }
+                },
+            },
         },
         "id": "health-request",
         "name": "Check IELTS health",
@@ -124,7 +152,19 @@ def health_workflow() -> dict[str, object]:
         "onError": "continueRegularOutput",
     }
     branch = {
-        "parameters": {"conditions": {"options": {"caseSensitive": True, "typeValidation": "strict", "version": 2}, "conditions": [{"leftValue": "={{ $json.statusCode }}", "rightValue": 200, "operator": {"type": "number", "operation": "equals"}}], "combinator": "and"}},
+        "parameters": {
+            "conditions": {
+                "options": {"caseSensitive": True, "typeValidation": "strict", "version": 2},
+                "conditions": [
+                    {
+                        "leftValue": "={{ $json.statusCode }}",
+                        "rightValue": 200,
+                        "operator": {"type": "number", "operation": "equals"},
+                    }
+                ],
+                "combinator": "and",
+            }
+        },
         "id": "health-status",
         "name": "Is healthy?",
         "type": "n8n-nodes-base.if",
@@ -136,31 +176,26 @@ def health_workflow() -> dict[str, object]:
     alert["name"] = "Notify through IELTS Python service"
     alert["position"] = [940, 420]
     alert["onError"] = "continueRegularOutput"
-    telegram_alert = {
-        "parameters": {
-            "resource": "message",
-            "operation": "sendMessage",
-            "chatId": "REPLACE_WITH_OWNER_TELEGRAM_ID",
-            "text": "IELTS AI Tutor health check failed. Check Railway service status and logs.",
-            "additionalFields": {"appendAttribution": False},
-        },
-        "id": "health-admin-telegram",
-        "name": "Send safe admin alert",
-        "type": "n8n-nodes-base.telegram",
-        "typeVersion": 1.2,
-        "position": [1180, 420],
-    }
     return {
         "name": "Application Health Monitoring",
-        "nodes": [schedule, check, branch, alert, telegram_alert],
+        "nodes": [schedule, check, branch, alert],
         "connections": {
             "Schedule": {"main": [[{"node": "Check IELTS health", "type": "main", "index": 0}]]},
             "Check IELTS health": {"main": [[{"node": "Is healthy?", "type": "main", "index": 0}]]},
-            "Is healthy?": {"main": [[], [{"node": "Notify through IELTS Python service", "type": "main", "index": 0}]]},
-            "Notify through IELTS Python service": {"main": [[{"node": "Send safe admin alert", "type": "main", "index": 0}]]},
+            "Is healthy?": {
+                "main": [
+                    [],
+                    [{"node": "Notify through IELTS Python service", "type": "main", "index": 0}],
+                ]
+            },
         },
         "active": False,
-        "settings": {"executionOrder": "v1", "timezone": "Asia/Tashkent", "saveDataErrorExecution": "none", "saveDataSuccessExecution": "none"},
+        "settings": {
+            "executionOrder": "v1",
+            "timezone": "Asia/Tashkent",
+            "saveDataErrorExecution": "none",
+            "saveDataSuccessExecution": "none",
+        },
         "versionId": "application-health-initial",
         "meta": {"templateCredsSetupCompleted": False},
         "tags": [],
@@ -171,7 +206,10 @@ def main() -> None:
     OUTPUT.mkdir(parents=True, exist_ok=True)
     for name, slug, cron, path, event in EVENTS:
         (OUTPUT / f"{slug}.json").write_text(
-            json.dumps(scheduled_workflow(name, slug, cron, path, event), ensure_ascii=False, indent=2) + "\n",
+            json.dumps(
+                scheduled_workflow(name, slug, cron, path, event), ensure_ascii=False, indent=2
+            )
+            + "\n",
             encoding="utf-8",
         )
     (OUTPUT / "application_health_monitoring.json").write_text(

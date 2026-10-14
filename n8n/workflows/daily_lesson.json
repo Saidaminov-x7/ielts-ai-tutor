@@ -25,8 +25,15 @@
       "parameters": {
         "method": "POST",
         "url": "http://ielts-webhook.railway.internal:8080/internal/daily",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Daily-Job-Secret",
+              "value": "={{ $env.DAILY_JOB_SECRET }}"
+            }
+          ]
+        },
         "options": {
           "timeout": 15000
         }

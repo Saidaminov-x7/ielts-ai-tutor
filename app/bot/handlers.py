@@ -21,6 +21,7 @@ from app.database.models import (
     Vocabulary,
 )
 from app.database.session import SessionLocal
+from app.learning.adaptive import adapt_day
 from app.learning.daily_tests import answer_quiz, start_quiz, submit_quiz
 from app.learning.lessons import complete_task, current_day, finish_day, lesson_summary
 from app.learning.reports import progress_report
@@ -92,6 +93,8 @@ async def lesson(callback: CallbackQuery) -> None:
         lines = [
             f"📚 Неделя {data['week']}/26 · день {data['day']}/182",
             f"Тема: {escape(str(data['topic']))}",
+            "Персональный план: "
+            f"{escape(adapt_day(session, owner_id(callback.from_user), data['day']))}",
         ]
         if data["grammar"]:
             lines.append(f"Грамматика: {escape(str(data['grammar'])[:500])}")

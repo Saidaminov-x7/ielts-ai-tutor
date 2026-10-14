@@ -1,5 +1,23 @@
 # IELTS AI Tutor — тестовый отчёт
 
+## Latest verification (2026-10-14)
+
+- `pytest -q`: **32 passed** (rerun 2026-10-14).
+- `ruff check app tests scripts migrations`: clean (rerun 2026-10-14).
+- `scripts/scan_secrets.py`: no likely hard-coded secrets found in project text files (rerun 2026-10-14).
+- `git diff --check`: clean (rerun 2026-10-14).
+- Railway latest-hour traffic: n8n 683 HTTP requests (519 2xx, 117 3xx, 43 4xx, 4 5xx). Every sampled request came from one Chrome IP; peak minute 146 during owner/editor loading. The 75 `/rest/push` status-0 requests, 401 login checks, and three `/rest/push` 502s correspond to the browser session and restarts. No second source or unexplained client traffic was seen. Webhook logged 2 health requests; cron had none and zero idle CPU/RAM.
+- n8n owner setup completed. After restart and redeploy, `/rest/settings` returned 200 and `showSetupOnFirstLoad=false`, proving first-owner setup persisted on the volume. Chrome requires a fresh sign-in; password remains user-held.
+- n8n `N8N_PROXY_HOPS` corrected from `0` to `1`; follow-up deployment succeeded and no new proxy-trust validation error appeared.
+- Latest n8n startup reported **0 draft and 0 published workflows**. The unsaved canvas is not counted as a workflow; none has yet passed an n8n execution test.
+
+## Verification follow-up (2026-10-14 21:20 Asia/Tashkent)
+
+- Owner recovery reset succeeded; a new owner registration then returned HTTP 200. Chrome is now at `/signin`; interactive editor verification awaits the user signing in with the password they just entered.
+- The persistent database now reports one inactive workflow, `Daily IELTS Lesson`. Metadata confirms its HTTP Request is `POST` to the private Python `/internal/daily` endpoint, with an environment expression for the auth header and no inline secret value.
+- The saved Schedule Trigger has an empty interval object. The workflow is incomplete and untested; do not activate it.
+- Current regression checks: pytest 32 passed; Ruff clean; secret scanner found no likely hard-coded secrets; `git diff --check` clean.
+
 Дата проверки: 2026-10-14 (обновлено при добавлении n8n event API).
 
 ## Выполнено
@@ -55,3 +73,11 @@
 ## Telegram rendering security
 
 Непроверенные строки из импортированного курса, личного словаря, журнала ошибок и OpenAI feedback экранируются перед отправкой с HTML parse mode aiogram. Regression-тест проверяет, что разметка/теги превращаются в текст, а не в HTML.
+# Latest regression/security check (2026-10-14 21:20 Asia/Tashkent)
+
+- `rtk pytest -q`: 32 passed.
+- `rtk ruff check app tests scripts migrations`: clean.
+- `rtk python scripts/scan_secrets.py`: no likely hard-coded secrets found in project text files.
+- `rtk git diff --check`: clean.
+- n8n live metadata: one inactive, incomplete `Daily IELTS Lesson` workflow. It has not been executed; these local tests do not verify n8n or Telegram delivery.
+

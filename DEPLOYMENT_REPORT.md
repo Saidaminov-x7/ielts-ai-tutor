@@ -1,5 +1,31 @@
 # IELTS AI Tutor — deployment report
 
+## Follow-up verification (2026-10-14 21:20 Asia/Tashkent)
+
+- After repeated `401` sign-in responses, the authorized reset completed and the owner recreated the account in Chrome; the Railway log records HTTP 200 for `/rest/owner/setup`. The app now redirects to `/signin`; user must sign in directly. No password was read or entered by the assistant.
+- Persistent SQLite contains one inactive `Daily IELTS Lesson` workflow with Schedule Trigger → HTTP Request nodes. The private URL and environment-based `DAILY_JOB_SECRET` header are configured, but the schedule interval is empty. No n8n credential rows exist. This workflow has not been end-to-end tested.
+- n8n deployment remains `03fe6ffd-a4dd-4609-afab-5810edb45444` (`SUCCESS`) with its `/home/node/.n8n` volume. Webhook sleeps with `/data`; daily-trigger is ready on `0 19 * * *` and has zero idle resource metrics.
+- Remaining: verify owner login; test the saved workflow end to end before activating it; create and test the other seven; confirm idempotency and persistence; only then consider disabling the old daily trigger. No Telegram/OpenAI credentials were added and live notification delivery is not verified.
+
+## Current verification (2026-10-14)
+
+- Owner recovery: owner setup completed in Chrome, then owner setup remained complete after restart (`/rest/settings` HTTP 200; `showSetupOnFirstLoad=false`). Chrome now requires sign-in again because the session was invalidated by restart/redeploy. No password was read by the assistant.
+- n8n configuration fix: `N8N_PROXY_HOPS` was confirmed as `0`, then set to `1` for Railway's reverse proxy. The follow-up deployment `03fe6ffd-a4dd-4609-afab-5810edb45444` reached `SUCCESS`; its startup logs contain no previous `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR` error.
+- Latest hourly request audit: n8n 683 requests (519 2xx, 117 3xx, 43 4xx, 4 5xx), all sampled from one Chrome client IP. A 146-request busiest minute coincided with editor loading. Repeated `/rest/push` status 0 and three transient 502s were websocket reconnects around restart; unauthorized login/workflow checks account for the 401s. No second client or unexplained external burst appeared in the sample. See [RAILWAY_AUDIT.md](RAILWAY_AUDIT.md).
+- n8n started after config deploy with `0 draft workflows, 0 published workflows`. The canvas changes made before redeploy were not saved; no workflow can be counted as created yet.
+
+- Recovery update: the user-authorized `n8n user-management:reset` completed through Railway SSH using the explicitly registered key. The `/setup` page is now open in Chrome so the owner can create a new password directly. No password was entered by the assistant. Next verify owner login and persistence across a restart before building workflows.
+- Railway SSH first closed because the CLI selected a different default identity; specifying the registered identity file fixed the connection. The reset command reported `Successfully reset the database to default user state.`
+- n8n logs also contain a proxy trust validation error (`X-Forwarded-For` received while Express `trust proxy` is false). Correct `N8N_PROXY_HOPS` after owner onboarding and verify a clean runtime log.
+
+- Railway project `ielts-ai-tutor`, production. Services: `ielts-webhook` is sleeping while idle, `ielts-daily-trigger` is ready between cron runs, and `ielts-n8n` is online on `n8nio/n8n:latest` (runtime 2.43.5).
+- Active n8n deployment: `25ca0939-dd90-435b-bb29-8d93a1028cb2`, `SUCCESS`. A 1 GB Railway volume is mounted at `/home/node/.n8n`; verified `N8N_USER_FOLDER=/home/node` and `RAILWAY_RUN_UID=0` in the Railway Variables UI.
+- The n8n owner setup endpoint succeeded twice before the most recent initialization; its startup log records an empty database, and the live browser is currently at `/setup`. Owner creation and post-restart persistence verification remain pending. Do not report n8n workflows as deployed yet.
+- Latest 24-hour traffic snapshot: n8n 299 requests with two transient `/rest/push` 502s during redeploy; webhook 16 requests with one cold-start 502; scheduled trigger received no public requests. No unexplained request burst.
+- Current local quality checks: 32 tests passed, Ruff clean, secret scan clean, diff check clean.
+
+Current Railway check (2026-10-14): see [RAILWAY_AUDIT.md](RAILWAY_AUDIT.md) for all three service states, sleep mode, storage, HTTPS, and request-rate findings. After redeploy the n8n editor returned to `/setup`. `N8N_USER_FOLDER=/home/node` now points to the mounted persistent volume; the user must recreate owner account in Chrome and we must verify it survives restart.
+
 Проверено: 2026-10-14.
 
 ## GitHub
@@ -16,8 +42,8 @@
 - Оба последних deployment имеют статус `SUCCESS`.
 - Live `GET /health`: HTTP 200 `{"status":"ok"}`.
 - Usage UI на дату проверки: Hobby, $0.20 текущего resource usage, $5 included usage, $0.00 current bill. Это снимок периода Oct 11–Nov 11, не месячный прогноз.
-- Self-hosted n8n Community `ielts-n8n` развернут в том же проекте как Docker image `n8nio/n8n:latest`, production region `sfo`, 1 GB volume `/home/node/.n8n`, private/unexposed service, `ALWAYS` restart, sleep disabled. Успешный deployment: `ee398c7c-d463-4949-b709-6209ce206e17`; runtime reports n8n 2.43.5 and successful migrations.
-- Первоначальный запуск показал `EACCES` на volume; Railway variable `RAILWAY_RUN_UID=0` исправил доступ согласно Railway volume permissions guidance. Перезапуск успешен, публичный домен не создавался.
+- Self-hosted n8n Community `ielts-n8n` развернут в том же проекте как Docker image `n8nio/n8n:latest`, production region `sfo`, 1 GB volume `/home/node/.n8n`, HTTPS domain, `ALWAYS` restart, sleep disabled. Последний successful deployment: `25ca0939-dd90-435b-bb29-8d93a1028cb2`; runtime reports n8n 2.43.5 and successful migrations. Chrome currently shows first-owner setup; no IELTS workflow создан.
+- Первоначальный запуск показал `EACCES` на volume; `RAILWAY_RUN_UID=0` исправил права, но первый owner bootstrap не пережил перезапуск. `N8N_USER_FOLDER=/home/node` задан явно; следующий owner bootstrap должен подтвердить сохранение в volume.
 - Короткий metrics snapshot после старта: RAM current ~60 MB, max ~147 MB; среднее и min искажены предыдущими нулевыми интервалами до запуска. Это не 10-минутный steady-state замер. Выборка ещё не достаточна для точной оценки месячной стоимости.
 - В Railway проекте размещён только предназначенный IELTS n8n сервис; другие проекты и службы не менялись.
 
@@ -30,16 +56,16 @@
 - n8n Cloud `saidaminov.app.n8n.cloud` показывает `Your trial is over`; апгрейд не оформлялся.
 - Python integration commit `98088aa` запушен в `main`; Railway webhook deployment `b19a6de1-f992-49bf-9fbc-f90a94ae9fe6` и daily trigger `33860a39-2663-4a93-9e67-0b6a48ada079` получили `SUCCESS` на этом SHA.
 - Live smoke: `/health` вернул HTTP 200; POST `/internal/scheduled-event` с неверным внутренним секретом вернул HTTP 403. Валидный production event не отправлялся.
-- Первичный n8n deployment упал из-за volume permission `EACCES`; UI Railway использован для подтверждённого пользователем применения настроек и повторного запуска. После добавления `RAILWAY_RUN_UID=0` deployment `ee398c7c-d463-4949-b709-6209ce206e17` получил `SUCCESS`, n8n 2.43.5 завершил миграции и слушает порт 5678.
+- n8n deployment `25ca0939-dd90-435b-bb29-8d93a1028cb2` получил `SUCCESS`, n8n 2.43.5 завершил миграции и слушает порт 5678. Owner setup пока не сохраняется к моменту текущей проверки; явно настроен `N8N_USER_FOLDER` для persistent volume.
 - На 2026-10-14 14:42 UTC короткий metrics snapshot после запуска: RAM current 0.060 GB, max 0.147 GB. Усреднение за час содержит интервалы до deployment, поэтому точное устойчивое среднее ещё не установлено; собрать не менее 10 минут свежих метрик.
 - Публичного домена нет; owner bootstrap, workflow import и credentials остаются невыполненными. Секретные значения не читались и не помещались в отчёт.
-- В репозитории созданы восемь неактивных JSON-экспортов workflows в `n8n/workflows/`; тесты шаблонов проходят вместе с приложением (`pytest -q`: 23 passed), `scripts/scan_secrets.py` не обнаружил вероятных секретов. Шаблоны пока не импортированы в Railway n8n.
+- В репозитории есть восемь workflow схем для проверки, но пользователь запросил сборку визуальных nodes непосредственно в n8n, поэтому JSON не импортировался. Текущие `tests/test_n8n_workflow_exports.py`: 2 passed; `scripts/scan_secrets.py` не нашёл вероятных секретов.
 - Получен живой 24-часовой snapshot памяти Python webhook: average 0.0047 GB, max 0.2524 GB, current 0.2313 GB; это не метрика n8n. Для ежедневного trigger все метрики были нулевыми в срезе. Фактическая память n8n измерима только после его deployment.
 
 ## Следующие действия
 
 1. Владелец добавляет три отсутствующие переменные бота/OpenAI в Railway Variables и передаёт исходную книгу курса.
-2. Безопасно завершить первичную настройку self-hosted n8n (создание owner password в n8n UI); до этого не выдавать публичный домен.
+2. Владелец повторно создаёт owner в `/setup`; затем проверить login persistence после restart. Не вводить пароль вместо пользователя.
 3. Измерить расход n8n и сверить прогноз с лимитом ~$5/month без изменения Railway тарифа.
 4. Настроить проверенное резервное копирование и тест восстановления persistent volume.
 5. Повторить live Telegram/OpenAI smoke tests и E2E workflow tests после конфигурации.

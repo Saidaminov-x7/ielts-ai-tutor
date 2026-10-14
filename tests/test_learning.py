@@ -1,7 +1,7 @@
 from datetime import date
 
 from app.database.models import Activity, CourseDay, Vocabulary
-from app.learning.adaptive import recommendation, weak_topics
+from app.learning.adaptive import adapt_day, recommendation, weak_topics
 from app.learning.daily_tests import QUESTIONS, answer_quiz, grade_quiz, start_quiz, submit_quiz
 from app.learning.lessons import TASKS, complete_task, finish_day, lesson_summary
 from app.learning.vocabulary import due_words, record_review
@@ -50,6 +50,18 @@ def test_adaptive_accuracy_uses_real_activity(session):
     session.commit()
     assert recommendation(59.9) == "Повторное изучение"
     assert weak_topics(session, 5)[0].accuracy == 50
+
+
+def test_adaptive_lesson_uses_lowest_observed_topic_score(session):
+    session.add_all(
+        [
+            Activity(owner_id=5, kind="quiz", topic="Present Simple", score=92),
+            Activity(owner_id=5, kind="quiz", topic="Present Perfect", score=48),
+        ]
+    )
+    session.commit()
+
+    assert "слабую тему" in adapt_day(session, 5, 12)
 
 
 def test_weekly_exam_records_answers_and_submits(session):

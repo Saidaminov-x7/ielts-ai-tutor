@@ -7,7 +7,7 @@
           "interval": [
             {
               "field": "cronExpression",
-              "expression": "0 */30 * * *"
+              "expression": "0 3 * * *"
             }
           ]
         }
@@ -82,8 +82,15 @@
       "parameters": {
         "method": "POST",
         "url": "http://ielts-webhook.railway.internal:8080/internal/scheduled-event",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Daily-Job-Secret",
+              "value": "={{ $env.DAILY_JOB_SECRET }}"
+            }
+          ]
+        },
         "options": {
           "timeout": 15000
         },
@@ -100,25 +107,6 @@
         420
       ],
       "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "resource": "message",
-        "operation": "sendMessage",
-        "chatId": "REPLACE_WITH_OWNER_TELEGRAM_ID",
-        "text": "IELTS AI Tutor health check failed. Check Railway service status and logs.",
-        "additionalFields": {
-          "appendAttribution": false
-        }
-      },
-      "id": "health-admin-telegram",
-      "name": "Send safe admin alert",
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
-      "position": [
-        1180,
-        420
-      ]
     }
   ],
   "connections": {
@@ -150,17 +138,6 @@
         [
           {
             "node": "Notify through IELTS Python service",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Notify through IELTS Python service": {
-      "main": [
-        [
-          {
-            "node": "Send safe admin alert",
             "type": "main",
             "index": 0
           }

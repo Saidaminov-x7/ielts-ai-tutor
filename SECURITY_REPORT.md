@@ -1,5 +1,13 @@
 # IELTS AI Tutor — security report
 
+## Latest checks (2026-10-14)
+
+- `scripts/scan_secrets.py` found no likely hard-coded secrets in project text files. `git diff --check` is clean. This is a source scan, not proof that no secret was ever exposed in chat, browser history, Railway logs, or Git history.
+- Railway variable values were not read through the connector. The UI exposed only the two non-secret persistence settings needed for diagnosis: `N8N_USER_FOLDER=/home/node` and `RAILWAY_RUN_UID=0`. Secret values remain unreported.
+- n8n is protected by owner setup, but the owner is currently absent from the active database (`/setup`; `/rest/login` 401). Complete owner setup and verify persistence before creating workflows.
+- Current Railway request logs show two transient n8n `/rest/push` 502s during restart and one webhook cold-start 502. They contain no token values in the reviewed entries. No sustained request burst was observed.
+- Telegram token was previously exposed in the work context; owner plans to rotate it. Do not use or repeat the old token. Telegram and OpenAI live calls remain blocked until replacement credentials are entered directly into Railway Variables.
+
 Дата: 2026-10-14. Это ограниченная проверка текущего кода и настроек, не независимый внешний аудит.
 
 ## Проверенные меры

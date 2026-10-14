@@ -43,6 +43,9 @@
         460,
         300
       ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
       "onError": "continueRegularOutput"
     },
     {
@@ -95,6 +98,26 @@
       "position": [
         940,
         420
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "REPLACE_WITH_OWNER_TELEGRAM_ID",
+        "text": "IELTS AI Tutor health check failed. Check Railway service status and logs.",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "health-admin-telegram",
+      "name": "Send safe admin alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1180,
+        420
       ]
     }
   ],
@@ -127,6 +150,17 @@
         [
           {
             "node": "Notify through IELTS Python service",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify through IELTS Python service": {
+      "main": [
+        [
+          {
+            "node": "Send safe admin alert",
             "type": "main",
             "index": 0
           }

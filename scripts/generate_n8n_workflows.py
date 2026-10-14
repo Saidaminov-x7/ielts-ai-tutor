@@ -118,6 +118,9 @@ def health_workflow() -> dict[str, object]:
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
         "position": [460, 300],
+        "retryOnFail": True,
+        "maxTries": 3,
+        "waitBetweenTries": 5000,
         "onError": "continueRegularOutput",
     }
     branch = {
@@ -132,13 +135,29 @@ def health_workflow() -> dict[str, object]:
     alert["id"] = "health-alert"
     alert["name"] = "Notify through IELTS Python service"
     alert["position"] = [940, 420]
+    alert["onError"] = "continueRegularOutput"
+    telegram_alert = {
+        "parameters": {
+            "resource": "message",
+            "operation": "sendMessage",
+            "chatId": "REPLACE_WITH_OWNER_TELEGRAM_ID",
+            "text": "IELTS AI Tutor health check failed. Check Railway service status and logs.",
+            "additionalFields": {"appendAttribution": False},
+        },
+        "id": "health-admin-telegram",
+        "name": "Send safe admin alert",
+        "type": "n8n-nodes-base.telegram",
+        "typeVersion": 1.2,
+        "position": [1180, 420],
+    }
     return {
         "name": "Application Health Monitoring",
-        "nodes": [schedule, check, branch, alert],
+        "nodes": [schedule, check, branch, alert, telegram_alert],
         "connections": {
             "Schedule": {"main": [[{"node": "Check IELTS health", "type": "main", "index": 0}]]},
             "Check IELTS health": {"main": [[{"node": "Is healthy?", "type": "main", "index": 0}]]},
             "Is healthy?": {"main": [[], [{"node": "Notify through IELTS Python service", "type": "main", "index": 0}]]},
+            "Notify through IELTS Python service": {"main": [[{"node": "Send safe admin alert", "type": "main", "index": 0}]]},
         },
         "active": False,
         "settings": {"executionOrder": "v1", "timezone": "Asia/Tashkent", "saveDataErrorExecution": "none", "saveDataSuccessExecution": "none"},

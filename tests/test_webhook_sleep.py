@@ -30,7 +30,7 @@ async def test_daily_wakeup_is_secret_protected_and_idempotent(session, monkeypa
     )
     monkeypatch.setattr(main, "SessionLocal", lambda: session)
     bot = FakeBot()
-    app = {"bot": bot}
+    app = {main.STATE_KEY: main.RuntimeState(bot=bot, dispatcher=None)}
     request = make_mocked_request(
         "POST", "/internal/daily", headers={"X-Daily-Job-Secret": secret}, app=app
     )
@@ -65,3 +65,13 @@ async def test_daily_wakeup_rejects_wrong_secret(monkeypatch):
     )
     with pytest.raises(HTTPForbidden):
         await main.daily_delivery(request)
+
+
+def test_service_starts_in_safe_setup_mode_without_user_credentials(monkeypatch):
+    from app import main
+
+    monkeypatch.setattr(main, "get_settings", lambda: Settings())
+    app = main.create_app()
+    paths = {route.resource.canonical for route in app.router.routes()}
+    assert "/health" in paths
+    assert "/telegram" not in paths

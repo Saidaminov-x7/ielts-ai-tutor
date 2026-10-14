@@ -1,5 +1,6 @@
 import hmac
 import logging
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from html import escape
 from zoneinfo import ZoneInfo
@@ -22,6 +23,15 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 logger = logging.getLogger("ielts_tutor")
 
 
+@dataclass
+class RuntimeState:
+    bot: Bot | None
+    dispatcher: Dispatcher | None
+
+
+STATE_KEY = web.AppKey("runtime_state", RuntimeState)
+
+
 async def health(_: web.Request) -> web.Response:
     return web.json_response({"status": "ok"})
 
@@ -33,7 +43,9 @@ async def daily_delivery(request: web.Request) -> web.Response:
     if len(expected) < 32 or not hmac.compare_digest(provided, expected):
         raise web.HTTPForbidden(text="Forbidden")
 
-    bot: Bot = request.app["bot"]
+    bot = request.app[STATE_KEY].bot
+    if bot is None:
+        return web.json_response({"status": "bot_not_configured"}, status=503)
     owner_id = settings.owner_telegram_id
     if owner_id is None:
         raise web.HTTPServiceUnavailable(text="Owner is not configured")
@@ -97,9 +109,14 @@ async def daily_delivery(request: web.Request) -> web.Response:
 
 
 async def startup(app: web.Application) -> None:
-    settings = get_settings()
     init_db()
-    bot: Bot = app["bot"]
+    settings = get_settings()
+    state = app[STATE_KEY]
+    bot = state.bot
+    dispatcher = state.dispatcher
+    if bot is None or dispatcher is None:
+        logger.warning("Telegram delivery is disabled until owner credentials are configured")
+        return
     secret = (
         settings.webhook_secret_token.get_secret_value() if settings.webhook_secret_token else ""
     )
@@ -114,38 +131,41 @@ async def startup(app: web.Application) -> None:
     await bot.set_webhook(
         f"{settings.webhook_base_url.rstrip('/')}/telegram",
         secret_token=secret,
-        allowed_updates=app["dispatcher"].resolve_used_update_types(),
+        allowed_updates=dispatcher.resolve_used_update_types(),
         drop_pending_updates=False,
     )
     logger.info("Telegram webhook configured")
 
 
 async def cleanup(app: web.Application) -> None:
-    await app["bot"].session.close()
+    bot = app[STATE_KEY].bot
+    if bot is not None:
+        await bot.session.close()
 
 
 def create_app() -> web.Application:
     settings = get_settings()
-    if not settings.telegram_bot_token or not settings.owner_telegram_id:
-        raise RuntimeError("Set TELEGRAM_BOT_TOKEN and OWNER_TELEGRAM_ID in Railway Variables")
-    bot = Bot(
-        token=settings.telegram_bot_token.get_secret_value(),
-        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-    )
-    dispatcher = Dispatcher()
-    dispatcher.message.outer_middleware(OwnerOnlyMiddleware())
-    dispatcher.callback_query.outer_middleware(OwnerOnlyMiddleware())
-    dispatcher.include_router(router)
+    bot: Bot | None = None
+    dispatcher: Dispatcher | None = None
+    if settings.telegram_bot_token and settings.owner_telegram_id:
+        bot = Bot(
+            token=settings.telegram_bot_token.get_secret_value(),
+            default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+        )
+        dispatcher = Dispatcher()
+        dispatcher.message.outer_middleware(OwnerOnlyMiddleware())
+        dispatcher.callback_query.outer_middleware(OwnerOnlyMiddleware())
+        dispatcher.include_router(router)
+    else:
+        logger.warning("Bot starts in setup mode; Telegram token and owner ID are not configured")
     app = web.Application(client_max_size=64 * 1024)
-    app["bot"] = bot
-    app["dispatcher"] = dispatcher
-    SimpleRequestHandler(
-        dispatcher=dispatcher,
-        bot=bot,
-        secret_token=settings.webhook_secret_token.get_secret_value()
-        if settings.webhook_secret_token
-        else None,
-    ).register(app, path="/telegram")
+    app[STATE_KEY] = RuntimeState(bot=bot, dispatcher=dispatcher)
+    if bot is not None and dispatcher is not None and settings.webhook_secret_token:
+        SimpleRequestHandler(
+            dispatcher=dispatcher,
+            bot=bot,
+            secret_token=settings.webhook_secret_token.get_secret_value(),
+        ).register(app, path="/telegram")
     app.router.add_get("/health", health)
     app.router.add_post("/internal/daily", daily_delivery)
     app.on_startup.append(startup)

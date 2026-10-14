@@ -2,6 +2,27 @@
 
 Исходный проект был пустым, Git-репозитория и файла `IELTS_7_5_250_istoriy_26_nedel_182_dnya_PRO.xlsx` нет. Переменные `TELEGRAM_BOT_TOKEN` и `OPENAI_API_KEY` не настроены. Исходные материалы курса не создаются и не подменяются вымышленными.
 
+## Дополнение: n8n, эксплуатация и security status (2026-10-14)
+
+- [x] Проверить открытые Chrome вкладки и подключения: Railway авторизован; n8n Cloud доступен как завершившийся trial; GitHub browser просит включить 2FA.
+- [x] Проверить n8n workflows/credentials без чтения секретных значений: один пустой неактивный workflow без триггеров и Telegram/Header Auth credential metadata.
+- [x] Проверить Railway проекты, workload, цену, sleep и health endpoint; посторонние проекты не менялись.
+- [x] После исправления прав `/data` оба IELTS Railway сервиса успешно развернулись; `/health` вернул HTTP 200.
+- [x] Создать `TEST_REPORT.md`, `SECURITY_REPORT.md`, `DEPLOYMENT_REPORT.md`, `N8N_WORKFLOWS.md`.
+- [ ] Развернуть и защитить self-hosted n8n Community, затем создать и проверить 8 workflows. Не публиковать n8n до bootstrap владельца и его пароля.
+- [ ] Связать workflows с авторизованными внутренними Python-операциями. Сейчас реализован только защищённый идемпотентный daily delivery; остальных event endpoints нет.
+- [ ] Владелец должен добавить bot token, numeric owner ID и OpenAI API key в Railway Variables, передать исходный XLSX и создать owner password n8n через защищённую веб-форму.
+- [ ] Проверить Telegram, Writing API, все 11 функций, восстановление volume и workflow E2E после подключения нужных материалов и credentials.
+- [ ] После снятия GitHub billing restriction повторить remote CI и secret scan.
+
+### Блокеры и бюджет
+
+- n8n Cloud `saidaminov.app.n8n.cloud` показывает `Your trial is over`; апгрейд/оплата не выполнялись.
+- Railway workspace сейчас Hobby. Usage UI: $0.20 текущего resource usage, $5 included usage, $0.00 текущего счёта. Снимок периода Oct 11–Nov 11, не прогноз.
+- По ставкам Railway постоянно работающий n8n при 0.5 GB RAM обойдётся примерно в $5/месяц только за память, до CPU, storage и egress. Footprint инстанса не измерен.
+- Безопасная первичная настройка n8n требует владельца и его пароля. Не создавать публичный незащищённый редактор и не вводить пароль вместо владельца.
+- GitHub browser попросил включить 2FA; коды не вводились. GitHub Actions отдельно заблокирован billing/spending-limit сообщением.
+
 ## План
 
 - [x] Осмотреть проект, инструкции, окружение, секреты и наличие XLSX.

@@ -2,6 +2,13 @@
 
 ## Fresh live checkpoint (2026-10-14 22:29 Asia/Tashkent)
 
+## Fresh deployment checkpoint (2026-10-14 23:04 Asia/Tashkent)
+
+- Private GitHub `main` and local clean checkout point to `c59ac5d01751e1eb44514e89e7681a0588c9288a` (`fix review persistence and expose tutor commands`).
+- Railway daily-trigger deployment `c932d898-08e3-470f-9af6-079bb2aa2c57` and webhook deployment `fbccb11e-a836-4817-af56-581685b51eb0` both reached `SUCCESS` on the exact commit. Production has three services, zero current issues, zero recent failures, and no pending work. n8n remains online; daily-trigger is ready; webhook is online after probe.
+- Live checks: webhook `/health` returned HTTP 200 `{"status":"ok"}`; unauthenticated POST `/internal/scheduled-event` returned HTTP 403; n8n `/healthz` returned HTTP 200.
+- n8n editor workflows remain blocked on owner sign-in in the isolated Chrome tab. The existing owner is retained; no further reset or registration was performed. Live Telegram and OpenAI remain blocked on owner-managed replacement credentials, and course workbook import remains blocked because the source workbook is not in the checkout.
+
 - Railway production has three services and no pending changes: `ielts-n8n` online (`0bd24930-58c6-4322-a9ab-c734b0769b23`), `ielts-webhook` sleeping, and `ielts-daily-trigger` ready on `0 19 * * *` UTC. Platform overview reports zero current issues and zero recent failures.
 - n8n is `n8nio/n8n:latest`, domain `https://ielts-n8n-production.up.railway.app`, one replica, 1 GB persistent volume at `/home/node/.n8n`. The Python webhook has a 1 GB volume at `/data` and Railway sleep enabled.
 - Live health checks: n8n `/healthz` HTTP 200; webhook `/health` HTTP 200. Owner record persists in n8n SQLite. Chrome had no saved password, so owner login could not be retried and no workflow was edited or executed.

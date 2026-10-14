@@ -2,6 +2,13 @@
 
 ## Fresh code checkpoint (2026-10-14 22:59 Asia/Tashkent)
 
+## Fresh deployment checkpoint (2026-10-14 23:04 Asia/Tashkent)
+
+- Commit `c59ac5d01751e1eb44514e89e7681a0588c9288a` is pushed to private GitHub `main`; local tree is clean.
+- Railway webhook deployment `fbccb11e-a836-4817-af56-581685b51eb0` and daily-trigger deployment `c932d898-08e3-470f-9af6-079bb2aa2c57` both reached `SUCCESS` on that commit. Production shows all three services healthy/ready, zero current issues, zero recent failures, and no pending changes.
+- Live smoke checks: webhook `/health` = HTTP 200 with `{"status":"ok"}`; unauthenticated POST `/internal/scheduled-event` = HTTP 403 as intended; n8n `/healthz` = HTTP 200. The webhook is online after the health probe; the daily cron remains ready on its configured schedule.
+- Remaining work: n8n editor login still requires the owner to enter the existing password in the isolated Chrome sign-in page; Telegram token rotation/replacement and OpenAI key setup remain owner-provided; the requested course workbook is not present. Until those inputs are available, do not claim n8n workflows, live Telegram/GPT delivery, or full production E2E are complete.
+
 - Исправлена потеря последнего ответа в SRS: финальный callback теперь коммитит ответ, журнал активности, курсор и streak. Добавлен regression test.
 - Добавлены slash-команды `/help`, `/today`, `/words`, `/review`, `/test`, `/writing`, `/progress`, `/mistakes`, `/settings`, использующие те же обработчики, что и кнопки меню. `/time` теперь валидирует время через `strptime`.
 - Устранены mypy-ошибки в POSIX entrypoint и явно помечены зависимости без опубликованных type stubs.

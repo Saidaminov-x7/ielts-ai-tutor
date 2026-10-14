@@ -2,6 +2,15 @@
 
 ## Fresh code verification (2026-10-14 22:59 Asia/Tashkent)
 
+## Production deployment smoke (2026-10-14 23:04 Asia/Tashkent)
+
+- Railway exact commit `c59ac5d01751e1eb44514e89e7681a0588c9288a`: webhook and daily-trigger deployments both `SUCCESS`.
+- `GET https://ielts-webhook-production.up.railway.app/health`: HTTP 200, `{"status":"ok"}`.
+- `POST https://ielts-webhook-production.up.railway.app/internal/scheduled-event` with an empty body and no credential: HTTP 403 (expected authorization rejection; no event was dispatched).
+- `GET https://ielts-n8n-production.up.railway.app/healthz`: HTTP 200.
+- Railway production overview: 3 services, 0 current issues, 0 recent failures, no pending changes.
+- The 35 local tests and lint/type/security checks are recorded in the code checkpoint above. These HTTP checks do not prove a successful authenticated event, Telegram delivery, or n8n workflow execution; those still need credentials and a successful editor login.
+
 - `pytest -q`: **35 passed**, включая проверку сохранения последнего SRS-ответа и регистрации обязательных slash-команд.
 - `ruff check app tests scripts migrations`: clean; `mypy app`: no issues; `python -m compileall -q app`: clean.
 - `scripts/scan_secrets.py`: no likely hard-coded secrets; `git diff --check`: clean.

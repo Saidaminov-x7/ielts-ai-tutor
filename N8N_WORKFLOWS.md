@@ -29,7 +29,7 @@
 
 ## Файлы для импорта
 
-JSON-шаблоны созданы в `n8n/workflows/`. Расписания используют timezone `Asia/Tashkent`; каждый шаблон выключен по умолчанию и не содержит секретов. Ежедневный урок вызывает `/internal/daily`; остальные события передают `event_type` и локальную дату в `/internal/scheduled-event`. Для защиты импорта после owner setup нужно создать Header Auth credential `IELTS Internal API` с заголовком `X-Daily-Job-Secret` и выбрать его в HTTP Request nodes. Затем проверить точное Railway private DNS имя из n8n service; шаблоны ожидают `ielts-webhook.railway.internal:8080`. После активации Daily IELTS Lesson нужно отключить прежний Railway cron `ielts-daily-trigger`, иначе будут повторные уведомления.
+JSON-шаблоны созданы в `n8n/workflows/`. Расписания используют timezone `Asia/Tashkent`; каждый шаблон выключен по умолчанию и не содержит секретов или фиктивного credential ID. Ежедневный урок вызывает `/internal/daily`; остальные события передают `event_type` и локальную дату в `/internal/scheduled-event`. Для защиты после owner setup нужно создать Header Auth credential `IELTS Internal API` с заголовком `X-Daily-Job-Secret` и выбрать его в HTTP Request nodes. Затем проверить точное Railway private DNS имя из n8n service; шаблоны ожидают `ielts-webhook.railway.internal:8080`. После активации Daily IELTS Lesson нужно отключить прежний Railway cron `ielts-daily-trigger`, иначе будут повторные уведомления.
 
 Генератор: `scripts/generate_n8n_workflows.py`; проверки exports: `tests/test_n8n_workflow_exports.py`. Health workflow выполняет запрос каждые 30 минут и может разбудить Python service. При полном сетевом отказе отправка уведомления через сам недоступный Python сервис невозможна; отдельный канал админ-оповещений пока не настроен.
 

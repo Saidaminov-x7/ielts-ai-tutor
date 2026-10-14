@@ -6,7 +6,7 @@ These eight inactive n8n Community workflow exports are import-ready templates. 
 
 1. Complete n8n owner setup over HTTPS. Keep the editor private or behind authentication.
 2. In n8n, create an encrypted **Header Auth** credential named `IELTS Internal API`: header name `X-Daily-Job-Secret`, value copied from the Python Railway service's `DAILY_JOB_SECRET` variable. Never put the value into an export, workflow field, URL, Git, or report.
-3. Import each JSON file and replace the placeholder credential reference by selecting `IELTS Internal API` in each HTTP Request node.
+3. Import each JSON file and select `IELTS Internal API` from the credential dropdown in each HTTP Request node. The exports intentionally contain no fake credential ID or secret.
 4. Verify the private URL `http://ielts-webhook.railway.internal:8080` resolves from the n8n service in Railway. If Railway's assigned private endpoint differs, update the base URL in the nodes to the exact private DNS name. Do not use a secret in the URL.
 5. Run one manual test for each event and inspect the Python response and SQLite `scheduled_events` row. Then activate schedules and verify a repeated event returns `already_processed`.
 

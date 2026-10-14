@@ -8,7 +8,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "n8n" / "workflows"
 PYTHON_URL = "http://ielts-webhook.railway.internal:8080"
-CREDENTIAL = {"id": "REPLACE_AFTER_IMPORT", "name": "IELTS Internal API"}
 
 EVENTS = [
     ("Daily IELTS Lesson", "daily_lesson", "0 0 * * *", "/internal/daily", None),
@@ -75,7 +74,6 @@ def http_node(name: str, path: str, event_type: str | None) -> dict[str, object]
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
         "position": [460, 300],
-        "credentials": {"httpHeaderAuth": dict(CREDENTIAL)},
     }
 
 

@@ -95,13 +95,7 @@
       "position": [
         940,
         420
-      ],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "REPLACE_AFTER_IMPORT",
-          "name": "IELTS Internal API"
-        }
-      }
+      ]
     }
   ],
   "connections": {

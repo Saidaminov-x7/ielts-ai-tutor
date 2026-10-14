@@ -47,7 +47,5 @@ def test_scheduled_workflows_call_only_the_python_internal_event_api() -> None:
                 if node["parameters"].get("url", "").endswith("/internal/scheduled-event")
             ]
         assert any(event in json.dumps(node["parameters"], ensure_ascii=False) for node in event_nodes)
-        assert all(
-            node.get("credentials", {}).get("httpHeaderAuth", {}).get("name") == "IELTS Internal API"
-            for node in event_nodes
-        )
+        assert all(node["parameters"]["authentication"] == "genericCredentialType" for node in event_nodes)
+        assert all(node["parameters"]["genericAuthType"] == "httpHeaderAuth" for node in event_nodes)

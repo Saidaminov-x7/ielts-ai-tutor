@@ -11,6 +11,7 @@
 - `scripts/scan_secrets.py`: не нашёл вероятных hard-coded секретов.
 - `detect-secrets scan --all-files`: 0 findings, 0 файлов с находками после исключения каталогов локального кэша.
 - Production health smoke test: `GET https://ielts-webhook-production.up.railway.app/health` вернул HTTP 200 и `{"status":"ok"}`.
+- После push `98088aa` оба Python сервиса получили Railway `SUCCESS`; live POST `/internal/scheduled-event` с неверным секретом вернул 403. Валидный event не отправлялся, поскольку Telegram owner credentials отсутствуют.
 - Railway оба сервиса: последний deployment `SUCCESS`; volume доступен вебхуку; режим sleep включён; cron настроен на `0 19 * * *` UTC.
 - Unit tests покрывают owner-only, отказ при неправильном секрете, идемпотентность ежедневной доставки, budget guard, owner filtering и SQL-подобную строку.
 
@@ -26,3 +27,10 @@
 ## Текущий критерий
 
 Сборка и HTTP health подтверждены. Доступность бота, отправка сообщений, работа GPT и ежедневный курс не объявляются готовыми до ввода владельцем credentials и исходных учебных материалов.
+# Проверка workflow exports (2026-10-14)
+
+- Сгенерированы восемь JSON workflow templates; все `active=false`, timezone `Asia/Tashkent`, включено отсутствие сохранения execution payloads в экспортных settings.
+- Автотесты проверяют наличие всех восьми файлов, обращения к ожидаемым Python маршрутам, отсутствие Telegram/OpenAI ключевых шаблонов и незаписанный секрет header.
+- Прогон после добавления тестов exports: `python -m pytest -q` — 23 passed.
+- Импорт, owner credential, расписания в реальном n8n и E2E уведомления не проверены: Railway deployment остаётся staged, owner account и bot credentials отсутствуют.
+

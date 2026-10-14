@@ -1,6 +1,6 @@
 # n8n workflow inventory and plan
 
-Проверено 2026-10-14. n8n Community для Railway подготовлен отдельным сервисом, но пока не запущен. Workflows ещё не созданы.
+Проверено 2026-10-14. n8n Community для Railway подготовлен отдельным сервисом, но пока не запущен. В репозитории подготовлены восемь inactive workflow exports в `n8n/workflows/`; они ещё не импортированы в живой экземпляр.
 
 ## Состояние найденных экземпляров
 
@@ -18,16 +18,24 @@
 
 | Workflow | Роль | Python владеет состоянием | Статус |
 |---|---|---|---|
-| Daily IELTS Lesson | Раз в день запускает отправку плана урока | Да; защищённый идемпотентный `/internal/daily` уже есть | Не подключён |
-| Vocabulary Revision | Проверяет due words и просит бот прислать ревизию | Python endpoint `vocabulary_revision` читает SQLite и отправляет сообщение | Не подключён |
-| Daily Mini Test | Напоминает о тесте `/test` | Python endpoint `daily_mini_test` | Не подключён |
-| Smart Reminders | Пинги незавершённых блоков с учётом настроек | Python endpoint `smart_reminders`; проверяет quiet mode и настройки | Не подключён |
-| Weekly IELTS Exam | Напоминает о недельном учебном экзамене | Python endpoint `weekly_ielts_exam`; сессию создаёт существующий Telegram flow после выбора экзамена | Не подключён |
-| Weekly Progress Report | Отправляет готовую Python статистику | Python endpoint `weekly_progress_report` | Не подключён |
-| Application Health Monitoring | Проверяет `/health`; при проблеме — безопасное уведомление | Health endpoint и минимальное сообщение `application_health_monitoring`; нужен error path в workflow | Не подключён |
-| AI Budget Monitoring | Сигнал при приближении к лимиту | Python endpoint `ai_budget_monitoring` смотрит SQLite usage и порог 80%, без вызова OpenAI | Не подключён |
+| Daily IELTS Lesson | Раз в день запускает отправку плана урока | Да; защищённый идемпотентный `/internal/daily` уже есть | JSON подготовлен, не импортирован |
+| Vocabulary Revision | Проверяет due words и просит бот прислать ревизию | Python endpoint `vocabulary_revision` читает SQLite и отправляет сообщение | JSON подготовлен, не импортирован |
+| Daily Mini Test | Напоминает о тесте `/test` | Python endpoint `daily_mini_test` | JSON подготовлен, не импортирован |
+| Smart Reminders | Пинги незавершённых блоков с учётом настроек | Python endpoint `smart_reminders`; проверяет quiet mode и настройки | JSON подготовлен, не импортирован |
+| Weekly IELTS Exam | Напоминает о недельном учебном экзамене | Python endpoint `weekly_ielts_exam`; сессию создаёт существующий Telegram flow после выбора экзамена | JSON подготовлен, не импортирован |
+| Weekly Progress Report | Отправляет готовую Python статистику | Python endpoint `weekly_progress_report` | JSON подготовлен, не импортирован |
+| Application Health Monitoring | Проверяет `/health`; при проблеме — безопасное уведомление | Health endpoint и минимальное сообщение `application_health_monitoring`; нужен error path в workflow | JSON подготовлен, не импортирован |
+| AI Budget Monitoring | Сигнал при приближении к лимиту | Python endpoint `ai_budget_monitoring` смотрит SQLite usage и порог 80%, без вызова OpenAI | JSON подготовлен, не импортирован |
+
+## Файлы для импорта
+
+JSON-шаблоны созданы в `n8n/workflows/`. Расписания используют timezone `Asia/Tashkent`; каждый шаблон выключен по умолчанию и не содержит секретов. Ежедневный урок вызывает `/internal/daily`; остальные события передают `event_type` и локальную дату в `/internal/scheduled-event`. Для защиты импорта после owner setup нужно создать Header Auth credential `IELTS Internal API` с заголовком `X-Daily-Job-Secret` и выбрать его в HTTP Request nodes. Затем проверить точное Railway private DNS имя из n8n service; шаблоны ожидают `ielts-webhook.railway.internal:8080`. После активации Daily IELTS Lesson нужно отключить прежний Railway cron `ielts-daily-trigger`, иначе будут повторные уведомления.
+
+Генератор: `scripts/generate_n8n_workflows.py`; проверки exports: `tests/test_n8n_workflow_exports.py`. Health workflow выполняет запрос каждые 30 минут и может разбудить Python service. При полном сетевом отказе отправка уведомления через сам недоступный Python сервис невозможна; отдельный канал админ-оповещений пока не настроен.
 
 Python endpoint `POST /internal/scheduled-event` защищён `X-Daily-Job-Secret`. Тело содержит только `event_type` и `event_date`; событие дедуплицируется в `scheduled_events` по типу/дате. Тексты, ответы и учебная история не передаются в n8n. `/internal/daily` остаётся отдельной, уже защищённой операцией ежедневного урока.
+
+Python event API развернут в commit `98088aa`; Railway webhook и cron deployment получили `SUCCESS`. Live `/health` вернул 200, неправильный event secret — 403. Положительная Telegram доставка не проверена, так как bot token и owner ID не настроены.
 
 ## Требования безопасности и интеграции
 

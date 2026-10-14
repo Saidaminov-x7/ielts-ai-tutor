@@ -14,8 +14,11 @@
 - [ ] Создать owner account n8n в защищённой форме. Не публиковать публичный редактор до bootstrap владельца.
 - [ ] Развернуть и защитить self-hosted n8n Community, затем создать и проверить 8 workflows.
 - [x] Добавить защищённый Python endpoint для семи scheduled event типов и SQLite dedupe ledger; добавить миграцию и тесты. Daily Lesson использует существующий защищённый `/internal/daily`.
+- [x] Подготовить восемь экспортируемых JSON-шаблонов n8n с расписанием Asia/Tashkent; шаблоны inactive, не содержат секретов и используют только Python API.
+- [x] Добавить проверки полноты workflow exports, timezone, inactivity и отсутствия секретов; `pytest -q` — 23 passed.
 - [ ] Создать восемь workflows на self-hosted n8n, настроить internal credential, расписания и E2E после owner bootstrap.
 - [ ] Владелец должен добавить bot token, numeric owner ID и OpenAI API key в Railway Variables, передать исходный XLSX и создать owner password n8n через защищённую веб-форму.
+- [ ] Устранить Railway approval gate: `accept_deploy` автоматически возвращает `Cancelled — the user did not approve this action`; staged patch `bce5013c-09eb-4f93-9bdb-5640cd3dadb9` не применён, доступная безопасная альтернатива для обхода отсутствует.
 - [ ] Проверить Telegram, Writing API, все 11 функций, восстановление volume и workflow E2E после подключения нужных материалов и credentials.
 - [ ] После снятия GitHub billing restriction повторить remote CI и secret scan.
 

@@ -50,8 +50,9 @@
 
 - Этап 1: завершён. Рабочая папка была пуста, Git отсутствует; Python 3.12.7 доступен.
 - Реализованы и локально проверены: Python backend, aiogram handlers, SQLite, owner-only middleware, lessons, SRS, quiz, weekly exam, Writing examiner service, бюджетный guard, XLSX importer, сохранённые напоминания.
-- Последний локальный прогон после исправлений отчёта, напоминаний и `/whoami`: 29 тестов проходят; Ruff чист по app/tests/migrations; mypy чист по проверенным модулям; compileall чист; сканер не нашёл вероятных hard-coded секретов.
+- Последний локальный прогон после исправлений отчёта, напоминаний и `/whoami`: 31 тест проходят; Ruff чист по app/tests/migrations; mypy чист по проверенным модулям; compileall чист; сканер не нашёл вероятных hard-coded секретов.
 - Alembic initial migration для 12 таблиц добавлена; тест проверил создание схемы и повторный `upgrade head`; `init_db()` применил её к `data/ielts.db`.
 - Недостающий XLSX не был сконструирован. Код не содержит проверенных 182 уроков, 1750 слов и готовых материалов Reading/Listening.
 - В Railway отсутствуют `TELEGRAM_BOT_TOKEN`, `OWNER_TELEGRAM_ID`, `OPENAI_API_KEY`; живой Telegram/OpenAI smoke test не запускался. Python и n8n deployment проверены отдельно как `SUCCESS`.
 - Остались внешние блокировки для полного acceptance: владелец должен предоставить/настроить Telegram и OpenAI credentials и исходную книгу; создать owner account n8n через защищённую форму. После этого нужно выполнить Telegram/n8n/OpenAI E2E, подтвердить все 182 дня и исходные слова, проверить резервное копирование/восстановление и переход legacy `create_all` БД на миграции.
+

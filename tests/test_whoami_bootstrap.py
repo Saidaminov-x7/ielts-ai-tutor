@@ -62,6 +62,27 @@ async def test_whoami_is_not_allowed_before_owner_setup_in_group(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_non_text_update_is_safely_rejected_during_owner_bootstrap(monkeypatch):
+    monkeypatch.setattr("app.security.authentication.get_settings", lambda: Settings())
+    middleware = OwnerOnlyMiddleware()
+    user = SimpleNamespace(id=24680)
+    event = SimpleNamespace(
+        text=None,
+        chat=SimpleNamespace(type="private"),
+        answer=lambda *_args, **_kwargs: None,
+    )
+
+    async def handler(_event, _data):
+        raise AssertionError("a non-text update must not pass the owner gate")
+
+    async def blocked_answer(*_args, **_kwargs):
+        return None
+
+    event.answer = blocked_answer
+    assert await middleware(handler, event, {"event_from_user": user}) is None
+
+
+@pytest.mark.asyncio
 async def test_whoami_does_not_bypass_configured_owner_id(monkeypatch):
     monkeypatch.setattr(
         "app.security.authentication.get_settings", lambda: Settings(owner_telegram_id=111)

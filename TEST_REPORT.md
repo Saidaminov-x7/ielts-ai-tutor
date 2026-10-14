@@ -51,3 +51,7 @@
 - Добавлено три unit-теста: bootstrap в личном чате, блокировка группы и отсутствие обхода заданного owner ID.
 - Полный повторный прогон после этого изменения: `pytest -q` — **29 passed**; Ruff чист по `app/tests/migrations`; mypy проверенных модулей без ошибок; compileall и secret scan пройдены; `git diff --check` чист.
 
+
+## Telegram rendering security
+
+Непроверенные строки из импортированного курса, личного словаря, журнала ошибок и OpenAI feedback экранируются перед отправкой с HTML parse mode aiogram. Regression-тест проверяет, что разметка/теги превращаются в текст, а не в HTML.

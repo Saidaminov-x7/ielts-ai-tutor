@@ -19,9 +19,10 @@ class OwnerOnlyMiddleware(BaseMiddleware):
         message = data.get("event_message") or getattr(event, "message", None)
         if message is None and hasattr(event, "text"):
             message = event
+        text = getattr(message, "text", None) if message is not None else None
         message_command = (
-            getattr(message, "text", "").strip().split(maxsplit=1)[0].split("@", 1)[0]
-            if message is not None and getattr(message, "text", "").strip()
+            text.strip().split(maxsplit=1)[0].split("@", 1)[0]
+            if isinstance(text, str) and text.strip()
             else ""
         )
         if (

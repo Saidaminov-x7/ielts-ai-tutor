@@ -89,9 +89,12 @@ async def lesson(callback: CallbackQuery) -> None:
     await callback.answer()
     with SessionLocal() as session:
         data = lesson_summary(session, owner_id(callback.from_user))
-        lines = [f"📚 Неделя {data['week']}/26 · день {data['day']}/182", f"Тема: {data['topic']}"]
+        lines = [
+            f"📚 Неделя {data['week']}/26 · день {data['day']}/182",
+            f"Тема: {escape(str(data['topic']))}",
+        ]
         if data["grammar"]:
-            lines.append(f"Грамматика: {data['grammar'][:500]}")
+            lines.append(f"Грамматика: {escape(str(data['grammar'])[:500])}")
         for item in data["tasks"]:
             lines.append(
                 f"{'✅' if item['done'] else '⬜'} {item['title']} ({item['minutes']} мин.)"
@@ -128,7 +131,7 @@ async def done(message: Message) -> None:
 async def progress(callback: CallbackQuery) -> None:
     await callback.answer()
     with SessionLocal() as session:
-        report = progress_report(session, owner_id(callback.from_user))
+        report = escape(progress_report(session, owner_id(callback.from_user)))
     if callback.message:
         await callback.message.answer(report, reply_markup=BACK)
 
@@ -155,7 +158,9 @@ async def search(message: Message) -> None:
         found = search_words(session, query, owner_id(message.from_user))
     await answer(
         message,
-        "\n".join(f"{w.english} — {w.translation}. {w.example}" for w in found)
+        "\n".join(
+            f"{escape(w.english)} — {escape(w.translation)}. {escape(w.example)}" for w in found
+        )
         or "Ничего не найдено.",
     )
 
@@ -169,7 +174,10 @@ async def add_personal_word(message: Message) -> None:
     with SessionLocal() as session:
         try:
             word = add_word(session, en, ru, owner_id=owner_id(message.from_user))
-            await answer(message, f"Добавлено: {word.english} — {word.translation}")
+            await answer(
+                message,
+                f"Добавлено: {escape(word.english)} — {escape(word.translation)}",
+            )
         except Exception:
             session.rollback()
             await answer(message, "Это слово с таким переводом уже есть в словаре.")
@@ -308,7 +316,7 @@ async def review_answer(message: Message) -> None:
         record_review(session, word, correct)
         await answer(
             message,
-            ("Верно!" if correct else f"Пока нет. Правильный ответ: {word.translation}")
+            ("Верно!" if correct else f"Пока нет. Правильный ответ: {escape(word.translation)}")
             + f"\nСледующее повторение через {word.interval_days} дн.",
         )
 
@@ -384,16 +392,19 @@ async def writing_submit(message: Message, state: FSMContext) -> None:
     with SessionLocal() as session:
         try:
             result = await examine(session, owner_id(message.from_user), message.text or "")
-            criteria = "\n".join(f"{key}: {value}" for key, value in result.criteria.items())
+            criteria = "\n".join(
+                f"{escape(key)}: {escape(str(value))}" for key, value in result.criteria.items()
+            )
             errors = "\n".join(
-                f"• {e.get('wrong', '')} → {e.get('correction', '')}: {e.get('explanation_ru', '')}"
+                f"• {escape(e.get('wrong', ''))} → {escape(e.get('correction', ''))}: "
+                f"{escape(e.get('explanation_ru', ''))}"
                 for e in result.errors[:8]
             )
             await answer(
                 message,
                 f"Ориентировочно: {result.estimated_band}/9 (не официальный балл)\n{criteria}\n"
-                f"{result.explanation_ru[:1500]}\nОшибки:\n{errors}\nРекомендации:\n"
-                + "\n".join(f"• {r}" for r in result.recommendations[:5]),
+                f"{escape(result.explanation_ru[:1500])}\nОшибки:\n{errors}\nРекомендации:\n"
+                + "\n".join(f"• {escape(r)}" for r in result.recommendations[:5]),
             )
         except Exception as exc:
             await answer(
@@ -418,7 +429,9 @@ async def errors(callback: CallbackQuery) -> None:
             )
         )
     report = "\n\n".join(
-        f"{row.topic}: {row.wrong_answer} → {row.correct_answer}\n{row.explanation}" for row in rows
+        f"{escape(row.topic)}: {escape(row.wrong_answer)} → "
+        f"{escape(row.correct_answer)}\n{escape(row.explanation)}"
+        for row in rows
     )
     if callback.message:
         await callback.message.answer(report or "Журнал ошибок пока пуст.", reply_markup=BACK)

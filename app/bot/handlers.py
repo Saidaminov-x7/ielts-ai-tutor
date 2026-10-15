@@ -11,7 +11,7 @@ from aiogram.types import CallbackQuery, Message, User
 from sqlalchemy import select
 
 from app.ai.writing_examiner import examine
-from app.bot.keyboards import BACK, MAIN_MENU
+from app.bot.keyboards import BACK, MAIN_MENU, MENU_ACTIONS
 from app.database.models import (
     Activity,
     ErrorLog,
@@ -79,6 +79,31 @@ async def menu(message: Message) -> None:
     await answer(message, "Главное меню:", reply_markup=MAIN_MENU)
 
 
+@router.message(F.text.in_(MENU_ACTIONS))
+async def keyboard_menu_action(message: Message, state: FSMContext) -> None:
+    """Route persistent Telegram keyboard labels to the same handlers as inline buttons."""
+    action = MENU_ACTIONS[message.text or ""]
+    callback = _command_as_callback(message, action)
+    if action == "lesson":
+        await lesson(callback)
+    elif action == "words":
+        await words(callback)
+    elif action == "review":
+        await review(callback)
+    elif action == "quiz":
+        await quiz(callback)
+    elif action == "writing":
+        await writing_start(callback, state)
+    elif action == "progress":
+        await progress(callback)
+    elif action == "errors":
+        await errors(callback)
+    elif action == "exam":
+        await exam(callback)
+    elif action == "settings":
+        await settings_menu(callback)
+
+
 @router.callback_query(F.data == "menu")
 async def show_menu(callback: CallbackQuery) -> None:
     await callback.answer()
@@ -97,11 +122,16 @@ async def lesson(callback: CallbackQuery) -> None:
             "Персональный план: "
             f"{escape(adapt_day(session, owner_id(callback.from_user), data['day']))}",
         ]
+        if not data["course_imported"]:
+            lines.append(
+                "Полная программа и слова курса ещё не загружены. "
+                "Можно заниматься по встроенному мини-тесту и личному словарю."
+            )
         if data["grammar"]:
             lines.append(f"Грамматика: {escape(str(data['grammar'])[:500])}")
         for item in data["tasks"]:
             lines.append(
-                f"{'✅' if item['done'] else '⬜'} {item['title']} ({item['minutes']} мин.)"
+                f"{'✅' if item['done'] else '▫️'} {item['title']} ({item['minutes']} мин.)"
             )
         lines.append(f"Осталось заданий: {data['remaining']}")
         lines.append("Чтобы отметить выполненный блок: /done grammar (после реального выполнения).")

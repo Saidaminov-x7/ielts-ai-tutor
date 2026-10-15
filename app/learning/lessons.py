@@ -40,6 +40,7 @@ def lesson_summary(session: Session, owner_id: int, day_number: int | None = Non
     return {
         "day": day,
         "week": (day - 1) // 7 + 1,
+        "course_imported": course is not None,
         "topic": course.topic if course else "Программа не импортирована",
         "grammar": course.grammar if course else "",
         "reading": course.reading if course else "Материал появится после импорта Excel.",

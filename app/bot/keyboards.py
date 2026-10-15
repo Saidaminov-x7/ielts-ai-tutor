@@ -1,27 +1,47 @@
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+)
 
-MAIN_MENU = InlineKeyboardMarkup(
-    inline_keyboard=[
-        [InlineKeyboardButton(text="📚 Сегодняшний урок", callback_data="lesson")],
+MAIN_MENU = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="📚 Сегодняшний урок")],
         [
-            InlineKeyboardButton(text="🧠 Изучить слова", callback_data="words"),
-            InlineKeyboardButton(text="🔁 Повторение", callback_data="review"),
+            KeyboardButton(text="🧠 Изучить слова"),
+            KeyboardButton(text="🔁 Повторение"),
         ],
         [
-            InlineKeyboardButton(text="📝 Мини-тест", callback_data="quiz"),
-            InlineKeyboardButton(text="✍️ Writing", callback_data="writing"),
+            KeyboardButton(text="📝 Мини-тест"),
+            KeyboardButton(text="✍️ Writing"),
         ],
         [
-            InlineKeyboardButton(text="📊 Мой прогресс", callback_data="progress"),
-            InlineKeyboardButton(text="❌ Мои ошибки", callback_data="errors"),
+            KeyboardButton(text="📊 Мой прогресс"),
+            KeyboardButton(text="❌ Мои ошибки"),
         ],
         [
-            InlineKeyboardButton(text="🏆 Еженедельный экзамен", callback_data="exam"),
-            InlineKeyboardButton(text="⚙️ Настройки", callback_data="settings"),
+            KeyboardButton(text="🏆 Еженедельный экзамен"),
+            KeyboardButton(text="⚙️ Настройки"),
         ],
-    ]
+    ],
+    resize_keyboard=True,
+    is_persistent=True,
+    input_field_placeholder="Выберите действие",
 )
 
 BACK = InlineKeyboardMarkup(
     inline_keyboard=[[InlineKeyboardButton(text="⬅️ Главное меню", callback_data="menu")]]
 )
+
+MENU_ACTIONS = {
+    "📚 Сегодняшний урок": "lesson",
+    "🧠 Изучить слова": "words",
+    "🔁 Повторение": "review",
+    "📝 Мини-тест": "quiz",
+    "✍️ Writing": "writing",
+    "📊 Мой прогресс": "progress",
+    "❌ Мои ошибки": "errors",
+    "🏆 Еженедельный экзамен": "exam",
+    "⚙️ Настройки": "settings",
+}

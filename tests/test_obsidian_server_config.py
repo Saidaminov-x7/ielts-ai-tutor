@@ -29,7 +29,7 @@ def test_git_credential_helper_reads_token_from_environment_without_storing_it()
     assert "GITHUB_TOKEN" in helper
     assert "password=%s" in helper
     assert "credential.helper" in initializer
-    assert "git clone --single-branch" in initializer
+    assert 'git -c credential.helper="$credential_helper" clone --single-branch' in initializer
     assert "git remote set-url" not in initializer
     assert "https://x-access-token:" not in initializer
     assert "HARDEN_DESKTOP=true" in readme_content()
@@ -54,6 +54,15 @@ def test_vault_initializer_rejects_invalid_repo_and_nonempty_non_git_folder():
     assert "A-Za-z0-9_.-" in initializer
     assert "non-empty directory has no Git metadata" in initializer
     assert "different origin" in initializer
+
+
+def test_private_vault_clone_uses_environment_credential_helper_before_fetch():
+    initializer = (SERVER / "init-vault").read_text(encoding="utf-8")
+
+    assert (
+        'git -c credential.helper="$credential_helper" clone --single-branch '
+        '--branch "$branch" "$remote" "$vault_dir"'
+    ) in initializer
 
 
 def test_setup_does_not_contain_tokens_or_public_vault_instruction():

@@ -50,4 +50,8 @@ else
   git -C "$vault_dir" config --local user.email "ielts-tutor-obsidian@users.noreply.github.com"
 fi
 
+# The LinuxServer startup hook runs as root; Obsidian itself runs as abc (UID/GID 1000).
+# Make the private checkout writable so the app can open the vault and create its settings.
+chown -R abc:abc "$vault_dir"
+
 echo "Private Obsidian vault is ready at /config/vault."

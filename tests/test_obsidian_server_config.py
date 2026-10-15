@@ -65,6 +65,15 @@ def test_private_vault_clone_uses_environment_credential_helper_before_fetch():
     ) in initializer
 
 
+def test_vault_checkout_is_owned_by_the_obsidian_runtime_user():
+    initializer = (SERVER / "init-vault").read_text(encoding="utf-8")
+
+    assert 'chown -R abc:abc "$vault_dir"' in initializer
+    assert initializer.index('chown -R abc:abc "$vault_dir"') > initializer.index(
+        'git -c credential.helper="$credential_helper" clone'
+    )
+
+
 def test_setup_does_not_contain_tokens_or_public_vault_instruction():
     readme = (SERVER / "README.md").read_text(encoding="utf-8")
     dockerfile = (SERVER / "Dockerfile").read_text(encoding="utf-8")

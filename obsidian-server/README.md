@@ -47,7 +47,8 @@ so Git cannot disclose credential-related details to Railway logs.
 `init-vault` clones the selected branch into `/config/vault` on first start.
 For an existing checkout it verifies the origin and fast-forward pulls changes.
 It refuses to overwrite a non-empty, non-Git directory or a checkout with a
-different origin.
+different origin. The initializer assigns the checkout to LinuxServer's `abc`
+runtime user (UID/GID 1000), so Obsidian can open and write its vault settings.
 
 ## Railway idle sleep
 

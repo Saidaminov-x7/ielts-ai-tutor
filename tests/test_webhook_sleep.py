@@ -10,7 +10,7 @@ class FakeBot:
     def __init__(self):
         self.messages = []
 
-    async def send_message(self, owner_id, text):
+    async def send_message(self, owner_id, text, **kwargs):
         self.messages.append((owner_id, text))
 
 

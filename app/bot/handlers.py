@@ -4,14 +4,21 @@ from html import escape
 from types import SimpleNamespace
 
 from aiogram import F, Router
-from aiogram.filters import Command, CommandStart
+from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message, User
 from sqlalchemy import select
 
 from app.ai.writing_examiner import examine
-from app.bot.keyboards import BACK, MAIN_MENU, MENU_ACTIONS
+from app.bot.keyboards import (
+    BACK,
+    EXAM_SUBMIT,
+    MAIN_MENU,
+    MENU_ACTIONS,
+    lesson_tasks_keyboard,
+    settings_keyboard,
+)
 from app.database.models import (
     Activity,
     ErrorLog,
@@ -44,6 +51,7 @@ class WritingState(StatesGroup):
 
 class WordState(StatesGroup):
     awaiting_word = State()
+    awaiting_search = State()
 
 
 async def answer(message: Message, text: str, **kwargs) -> None:
@@ -54,40 +62,29 @@ async def answer(message: Message, text: str, **kwargs) -> None:
 async def start(message: Message) -> None:
     await answer(
         message,
-        "Привет! Я помогу заниматься по программе IELTS Academic.\n\n"
+        "Привет! Я помогу заниматься по программе IELTS Academic. Выбирайте действия "
+        "кнопками внизу чата, а со мной можно общаться обычными сообщениями.\n\n"
         "Результаты — учебная оценка, не официальный IELTS Band Score.\n"
-        "Тексты для проверки Writing отправляются в OpenAI API, если ключ настроен.",
+        "GPT используется только по вашему выбору для проверки Writing.",
         reply_markup=MAIN_MENU,
     )
-
-
-@router.message(Command("whoami"))
-async def whoami(message: Message) -> None:
-    if message.chat.type != "private" or message.from_user is None:
-        await answer(message, "Команда доступна только в личном чате с ботом.")
-        return
-    await answer(
-        message,
-        f"Ваш Telegram User ID: <code>{message.from_user.id}</code>\n"
-        "До настройки этого ID доступна только эта команда.",
-        parse_mode="HTML",
-    )
-
-
-@router.message(Command("menu"))
-async def menu(message: Message) -> None:
-    await answer(message, "Главное меню:", reply_markup=MAIN_MENU)
 
 
 @router.message(F.text.in_(MENU_ACTIONS))
 async def keyboard_menu_action(message: Message, state: FSMContext) -> None:
     """Route persistent Telegram keyboard labels to the same handlers as inline buttons."""
     action = MENU_ACTIONS[message.text or ""]
+    await state.clear()
+    if action == "menu":
+        await answer(message, "Выберите действие:", reply_markup=MAIN_MENU)
+        return
     callback = _command_as_callback(message, action)
     if action == "lesson":
         await lesson(callback)
     elif action == "words":
         await words(callback)
+    elif action == "search":
+        await search_start(message, state)
     elif action == "review":
         await review(callback)
     elif action == "quiz":
@@ -108,7 +105,7 @@ async def keyboard_menu_action(message: Message, state: FSMContext) -> None:
 async def show_menu(callback: CallbackQuery) -> None:
     await callback.answer()
     if callback.message:
-        await callback.message.answer("Главное меню:", reply_markup=MAIN_MENU)
+        await callback.message.answer("Выберите действие:", reply_markup=MAIN_MENU)
 
 
 @router.callback_query(F.data == "lesson")
@@ -134,30 +131,30 @@ async def lesson(callback: CallbackQuery) -> None:
                 f"{'✅' if item['done'] else '▫️'} {item['title']} ({item['minutes']} мин.)"
             )
         lines.append(f"Осталось заданий: {data['remaining']}")
-        lines.append("Чтобы отметить выполненный блок: /done grammar (после реального выполнения).")
         if callback.message:
-            await callback.message.answer("\n".join(lines), reply_markup=BACK)
+            await callback.message.answer(
+                "\n".join(lines), reply_markup=lesson_tasks_keyboard(data["tasks"])
+            )
 
 
-@router.message(Command("done"))
-async def done(message: Message) -> None:
-    parts = (message.text or "").split(maxsplit=1)
-    key = parts[1].strip().lower() if len(parts) > 1 else ""
+@router.callback_query(F.data.startswith("task:"))
+async def complete_task_callback(callback: CallbackQuery) -> None:
+    key = (callback.data or "").partition(":")[2]
     with SessionLocal() as session:
-        uid = owner_id(message.from_user)
+        uid = owner_id(callback.from_user)
         day = current_day(session, uid)
         if not complete_task(session, uid, day, key):
-            await answer(
-                message,
-                "Блоки: review, grammar, vocabulary, exercises, reading, listening, writing, quiz.",
-            )
+            await callback.answer("Не удалось отметить этот блок.", show_alert=True)
             return
         finished = finish_day(session, uid, day)
-        await answer(
-            message,
+        summary = lesson_summary(session, uid, day)
+    await callback.answer("День завершён!" if finished else "Блок отмечен. Прогресс обновлён.")
+    if callback.message:
+        await callback.message.answer(
             "День завершён. Серия и прогресс обновлены."
             if finished
             else "Блок отмечен. День засчитается после выполнения всех 8 блоков.",
+            reply_markup=lesson_tasks_keyboard(summary["tasks"]),
         )
 
 
@@ -175,19 +172,23 @@ async def words(callback: CallbackQuery) -> None:
     await callback.answer()
     if callback.message:
         await callback.message.answer(
-            "Отправьте слово и перевод в формате: <code>apple — яблоко</code>.\n"
-            "Для поиска используйте /search слово.",
+            "Отправьте английское слово и перевод через тире, например: "
+            "<code>apple — яблоко</code>.\n"
+            "Чтобы найти слово, нажмите «🔎 Найти слово» в клавиатуре.",
             parse_mode="HTML",
             reply_markup=BACK,
         )
 
 
-@router.message(Command("search"))
-async def search(message: Message) -> None:
-    query = (message.text or "").partition(" ")[2].strip()
-    if not query:
-        await answer(message, "Использование: /search английское слово или перевод")
-        return
+async def search_start(message: Message, state: FSMContext) -> None:
+    await state.set_state(WordState.awaiting_search)
+    await answer(message, "Напишите английское слово или перевод для поиска.")
+
+
+@router.message(WordState.awaiting_search, F.text)
+async def search(message: Message, state: FSMContext) -> None:
+    query = (message.text or "").strip()
+    await state.clear()
     with SessionLocal() as session:
         found = search_words(session, query, owner_id(message.from_user))
     await answer(
@@ -343,23 +344,6 @@ async def review_answer_callback(callback: CallbackQuery) -> None:
                 )
 
 
-@router.message(Command("answer"))
-async def review_answer(message: Message) -> None:
-    guess = (message.text or "").partition(" ")[2].strip().casefold()
-    with SessionLocal() as session:
-        word = next(iter(due_words(session, limit=10, owner_id=owner_id(message.from_user))), None)
-        if not word:
-            await answer(message, "На сегодня повторений нет.")
-            return
-        correct = guess == word.translation.strip().casefold()
-        record_review(session, word, correct)
-        await answer(
-            message,
-            ("Верно!" if correct else f"Пока нет. Правильный ответ: {escape(word.translation)}")
-            + f"\nСледующее повторение через {word.interval_days} дн.",
-        )
-
-
 @router.callback_query(F.data == "quiz")
 async def quiz(callback: CallbackQuery) -> None:
     from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -505,7 +489,23 @@ async def exam(callback: CallbackQuery) -> None:
                 f"{idx + 1}. {question['question']}",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
             )
-        await callback.message.answer("Когда закончите, отправьте /submit_exam.", reply_markup=BACK)
+        await callback.message.answer(
+            "Когда ответите на вопросы, завершите экзамен кнопкой:", reply_markup=EXAM_SUBMIT
+        )
+
+
+@router.callback_query(F.data == "exam:submit")
+async def submit_exam_callback(callback: CallbackQuery) -> None:
+    result = await submit_exam_for_owner(owner_id(callback.from_user))
+    if result is None:
+        await callback.answer("Активный экзамен не найден.", show_alert=True)
+        return
+    await callback.answer("Экзамен завершён.")
+    if callback.message:
+        await callback.message.answer(
+            f"Результат: {result['score']}/{result['total']}\n{result['note']}",
+            reply_markup=MAIN_MENU,
+        )
 
 
 @router.callback_query(F.data.startswith("exam:"))
@@ -523,22 +523,19 @@ async def exam_answer(callback: CallbackQuery) -> None:
     )
 
 
-@router.message(Command("submit_exam"))
-async def submit_exam_command(message: Message) -> None:
+async def submit_exam_for_owner(uid: int) -> dict | None:
     with SessionLocal() as session:
         exam_session = session.scalar(
             select(ExamSession)
             .where(
-                ExamSession.owner_id == owner_id(message.from_user),
+                ExamSession.owner_id == uid,
                 ExamSession.submitted_at.is_(None),
             )
             .order_by(ExamSession.started_at.desc())
         )
         if not exam_session:
-            await answer(message, "Активный экзамен не найден.")
-            return
-        result = submit_exam(session, exam_session)
-    await answer(message, f"Результат: {result['score']}/{result['total']}\n{result['note']}")
+            return None
+        return submit_exam(session, exam_session)
 
 
 @router.callback_query(F.data == "settings")
@@ -555,72 +552,55 @@ async def settings_menu(callback: CallbackQuery) -> None:
         quiet_state = "да" if settings.quiet_mode else "нет"
         text = (
             f"Напоминания: {reminder_state}\nВремя: {settings.reminder_time} (Asia/Tashkent)\n"
-            f"Тихий режим: {quiet_state}"
+            f"Тихий режим: {quiet_state}\n\n"
+            "Меняйте настройки кнопками под сообщением."
         )
+        keyboard = settings_keyboard(settings.reminders_enabled, settings.quiet_mode)
     if callback.message:
-        await callback.message.answer(
-            text + "\nКоманды: /reminders on|off · /quiet on|off · /time ЧЧ:ММ", reply_markup=BACK
-        )
+        await callback.message.answer(text, reply_markup=keyboard)
 
 
-@router.message(Command("reminders"))
-async def reminders(message: Message) -> None:
-    value = (message.text or "").partition(" ")[2].strip().lower()
-    if value not in {"on", "off"}:
-        await answer(message, "Использование: /reminders on|off")
-        return
+@router.callback_query(F.data.startswith("settings:"))
+async def update_settings_callback(callback: CallbackQuery) -> None:
+    parts = (callback.data or "").split(":")
+    action = parts[1] if len(parts) > 1 else ""
+    time_value = parts[2] if len(parts) > 2 else ""
+    if action == "time":
+        try:
+            parsed = datetime.strptime(time_value, "%H:%M")
+        except ValueError:
+            await callback.answer("Некорректное время.", show_alert=True)
+            return
+        time_value = parsed.strftime("%H:%M")
     with SessionLocal() as session:
-        uid = owner_id(message.from_user)
+        uid = owner_id(callback.from_user)
         row = session.get(UserSettings, uid) or UserSettings(
             owner_id=uid, current_day=1, streak=0, max_streak=0, completed_days=0
         )
-        row.reminders_enabled = value == "on"
+        if action == "reminders":
+            row.reminders_enabled = not row.reminders_enabled
+            notice = "Напоминания включены." if row.reminders_enabled else "Напоминания выключены."
+        elif action == "quiet":
+            row.quiet_mode = not row.quiet_mode
+            notice = "Тихий режим включён." if row.quiet_mode else "Тихий режим выключен."
+        elif action == "time":
+            row.reminder_time = time_value
+            notice = f"Время напоминаний: {time_value} (Ташкент)."
+        else:
+            await callback.answer("Настройка не найдена.", show_alert=True)
+            return
         session.add(row)
         session.commit()
-    await answer(message, "Напоминания " + ("включены." if value == "on" else "выключены."))
-
-
-@router.message(Command("quiet"))
-async def quiet(message: Message) -> None:
-    value = (message.text or "").partition(" ")[2].strip().lower()
-    if value not in {"on", "off"}:
-        await answer(message, "Использование: /quiet on|off")
-        return
-    with SessionLocal() as session:
-        uid = owner_id(message.from_user)
-        row = session.get(UserSettings, uid) or UserSettings(
-            owner_id=uid, current_day=1, streak=0, max_streak=0, completed_days=0
+        reminders_enabled, quiet_mode = row.reminders_enabled, row.quiet_mode
+    await callback.answer(notice)
+    if callback.message:
+        await callback.message.edit_reply_markup(
+            reply_markup=settings_keyboard(reminders_enabled, quiet_mode)
         )
-        row.quiet_mode = value == "on"
-        session.add(row)
-        session.commit()
-    await answer(message, "Тихий режим " + ("включён." if value == "on" else "выключен."))
 
 
-@router.message(Command("time"))
-async def change_time(message: Message) -> None:
-    value = (message.text or "").partition(" ")[2].strip()
-    try:
-        parsed = datetime.strptime(value, "%H:%M")
-    except ValueError:
-        await answer(message, "Формат времени: /time 19:00")
-        return
-    hour, minute = parsed.hour, parsed.minute
-    with SessionLocal() as session:
-        uid = owner_id(message.from_user)
-        row = session.get(UserSettings, uid) or UserSettings(
-            owner_id=uid, current_day=1, streak=0, max_streak=0, completed_days=0
-        )
-        row.reminder_time = f"{hour:02d}:{minute:02d}"
-        session.add(row)
-        session.commit()
-    await answer(
-        message, f"Время напоминаний установлено: {hour:02d}:{minute:02d} (Asia/Tashkent)."
-    )
-
-
-async def _command_callback_ack(*_args, **_kwargs) -> None:
-    """Callback handlers can share their tested behavior with slash commands."""
+async def _callback_ack(*_args, **_kwargs) -> None:
+    """Acknowledge simulated callbacks used to reuse message-based button handlers."""
 
 
 def _command_as_callback(message: Message, data: str) -> SimpleNamespace:
@@ -628,58 +608,14 @@ def _command_as_callback(message: Message, data: str) -> SimpleNamespace:
         from_user=message.from_user,
         message=message,
         data=data,
-        answer=_command_callback_ack,
+        answer=_callback_ack,
     )
 
 
-@router.message(Command("help"))
-async def help_command(message: Message) -> None:
+@router.message(F.text)
+async def unknown_text(message: Message) -> None:
     await answer(
         message,
-        "Команды IELTS Tutor:\n"
-        "/today — урок дня\n/words — личный словарь\n/review — повторение слов\n"
-        "/test — ежедневный мини-тест\n/writing — проверка Writing\n"
-        "/progress — прогресс\n/mistakes — журнал ошибок\n/settings — настройки\n"
-        "/menu — главное меню",
+        "Используйте кнопки меню. Для словаря отправьте пару «слово — перевод».",
         reply_markup=MAIN_MENU,
     )
-
-
-@router.message(Command("today"))
-async def today_command(message: Message) -> None:
-    await lesson(_command_as_callback(message, "lesson"))
-
-
-@router.message(Command("words"))
-async def words_command(message: Message) -> None:
-    await words(_command_as_callback(message, "words"))
-
-
-@router.message(Command("review"))
-async def review_command(message: Message) -> None:
-    await review(_command_as_callback(message, "review"))
-
-
-@router.message(Command("test"))
-async def test_command(message: Message) -> None:
-    await quiz(_command_as_callback(message, "quiz"))
-
-
-@router.message(Command("writing"))
-async def writing_command(message: Message, state: FSMContext) -> None:
-    await writing_start(_command_as_callback(message, "writing"), state)
-
-
-@router.message(Command("progress"))
-async def progress_command(message: Message) -> None:
-    await progress(_command_as_callback(message, "progress"))
-
-
-@router.message(Command("mistakes"))
-async def mistakes_command(message: Message) -> None:
-    await errors(_command_as_callback(message, "errors"))
-
-
-@router.message(Command("settings"))
-async def settings_command(message: Message) -> None:
-    await settings_menu(_command_as_callback(message, "settings"))

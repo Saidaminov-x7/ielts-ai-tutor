@@ -51,37 +51,20 @@ async def test_final_review_callback_commits_session_activity_and_streak(
     callback.answer.assert_awaited_once()
 
 
-def test_required_slash_commands_are_registered():
+def test_button_menu_replaces_slash_command_navigation():
     registered = {handler.callback.__name__ for handler in handlers.router.message.handlers}
-    assert {
-        "start",
-        "help_command",
-        "today_command",
-        "words_command",
-        "review_command",
-        "test_command",
-        "writing_command",
-        "progress_command",
-        "mistakes_command",
-        "settings_command",
-    } <= registered
+    assert "start" in registered
+    assert "keyboard_menu_action" in registered
+    assert not any(name.endswith("_command") for name in registered)
 
 
 @pytest.mark.asyncio
-async def test_help_exposes_required_user_commands():
+async def test_start_shows_persistent_menu_and_limits_ai_to_writing():
+    from app.bot.keyboards import MAIN_MENU
+
     message = SimpleNamespace(answer=AsyncMock())
-    await handlers.help_command(message)
+    await handlers.start(message)
     text = message.answer.await_args.args[0]
-    assert all(
-        command in text
-        for command in (
-            "/today",
-            "/words",
-            "/review",
-            "/test",
-            "/writing",
-            "/progress",
-            "/mistakes",
-            "/settings",
-        )
-    )
+    assert "кнопками" in text
+    assert "только по вашему выбору" in text
+    assert message.answer.await_args.kwargs["reply_markup"] is MAIN_MENU

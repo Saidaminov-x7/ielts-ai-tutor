@@ -14,6 +14,7 @@ from aiohttp import web
 from sqlalchemy import select
 
 from app.bot.handlers import router
+from app.bot.keyboards import MAIN_MENU
 from app.config import get_settings
 from app.database.models import CourseDay, DailyDelivery, UserSettings, Vocabulary
 from app.database.session import SessionLocal, init_db
@@ -96,9 +97,9 @@ async def daily_delivery(request: web.Request) -> web.Response:
             )
         else:
             lines.append("\nСлова появятся после импорта вашей программы курса.")
-        lines.append("\nОткройте /menu, чтобы начать занятие.")
+        lines.append("\nОткройте меню кнопок внизу чата, чтобы начать занятие.")
         try:
-            await bot.send_message(owner_id, "\n".join(lines))
+            await bot.send_message(owner_id, "\n".join(lines), reply_markup=MAIN_MENU)
         except TelegramAPIError:
             logger.exception("Daily Telegram delivery failed for owner")
             session.rollback()
@@ -140,7 +141,7 @@ async def scheduled_event(request: web.Request) -> web.Response:
             if message is None:
                 finish_event(session, event, "skipped")
                 return web.json_response({"status": "skipped"})
-            await bot.send_message(owner_id, message)
+            await bot.send_message(owner_id, message, reply_markup=MAIN_MENU)
             finish_event(session, event, "sent")
         except TelegramAPIError:
             logger.exception("Scheduled Telegram event failed")
@@ -171,6 +172,7 @@ async def startup(app: web.Application) -> None:
         raise RuntimeError(
             "WEBHOOK_SECRET_TOKEN must be a generated secret of at least 32 characters"
         )
+    await bot.set_my_commands([])
     if not settings.daily_job_secret or len(settings.daily_job_secret.get_secret_value()) < 32:
         raise RuntimeError("DAILY_JOB_SECRET must be a generated secret of at least 32 characters")
     await bot.set_webhook(

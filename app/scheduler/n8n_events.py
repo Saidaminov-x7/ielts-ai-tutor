@@ -35,13 +35,16 @@ def event_message(
     if event_type == "vocabulary_revision":
         words = due_words(session, limit=10, owner_id=owner_id)
         if not words:
-            return "Сегодня нет слов для повторения. Добавьте слова или откройте /menu.", "sent"
+            return (
+                "Сегодня нет слов для повторения. Добавьте их через меню «Изучить слова».",
+                "sent",
+            )
         lines = ["🔁 <b>Пора повторить слова</b>"]
         lines.extend(f"• {escape(word.english)} — {escape(word.translation)}" for word in words)
-        lines.append("Начните тренировку: /review")
+        lines.append("Начните тренировку кнопкой «🔁 Повторение» внизу чата.")
         return "\n".join(lines), "sent"
     if event_type == "daily_mini_test":
-        return "📝 Ежедневный мини-тест готов. Начните его командой /test.", "sent"
+        return "📝 Ежедневный мини-тест готов. Откройте его кнопкой «📝 Мини-тест».", "sent"
     if event_type == "smart_reminders":
         completed = set(
             session.scalars(
@@ -59,14 +62,15 @@ def event_message(
         titles = ", ".join(title for _, title in remaining[:3])
         extra = f" и ещё {len(remaining) - 3}" if len(remaining) > 3 else ""
         return (
-            f"⏰ Осталось блоков: {len(remaining)} — {titles}{extra}. Откройте /lesson.",
+            f"⏰ Осталось блоков: {len(remaining)} — {titles}{extra}. "
+            "Откройте «📚 Сегодняшний урок» кнопкой внизу чата.",
             "sent",
         )
     if event_type == "weekly_ielts_exam":
         week = min(26, (current_day - 1) // 7 + 1)
         return (
             f"📋 Пора пройти контрольный экзамен недели {week}/26. "
-            "Откройте /menu и выберите «Экзамен».",
+            "Откройте его кнопкой «🏆 Еженедельный экзамен» внизу чата.",
             "sent",
         )
     if event_type == "weekly_progress_report":

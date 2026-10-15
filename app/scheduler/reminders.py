@@ -17,7 +17,7 @@ async def send_reminder(bot: Bot, owner_id: int, kind: str) -> None:
             return
         text = {
             "lesson": f"📚 Пора начать учебный день {settings.current_day}/182.",
-            "weekly": "📊 Откройте /menu, чтобы посмотреть прогресс недели.",
+            "weekly": "📊 Откройте кнопку «📊 Мой прогресс» внизу чата.",
         }.get(kind, "🔁 Проверьте слова, ожидающие повторения.")
     await bot.send_message(owner_id, text)
 

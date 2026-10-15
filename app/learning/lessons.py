@@ -71,6 +71,15 @@ def complete_task(session: Session, owner_id: int, day_number: int, task_key: st
 
 
 def finish_day(session: Session, owner_id: int, day_number: int) -> bool:
+    existing_completion = session.scalar(
+        select(Activity).where(
+            Activity.owner_id == owner_id,
+            Activity.day_number == day_number,
+            Activity.kind == "lesson",
+        )
+    )
+    if existing_completion:
+        return False
     progress = list(
         session.scalars(
             select(TaskProgress).where(

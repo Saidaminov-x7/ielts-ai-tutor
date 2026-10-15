@@ -12,6 +12,7 @@ MAIN_MENU = ReplyKeyboardMarkup(
             KeyboardButton(text="🧠 Изучить слова"),
             KeyboardButton(text="🔁 Повторение"),
         ],
+        [KeyboardButton(text="🔎 Найти слово")],
         [
             KeyboardButton(text="📝 Мини-тест"),
             KeyboardButton(text="✍️ Writing"),
@@ -24,6 +25,7 @@ MAIN_MENU = ReplyKeyboardMarkup(
             KeyboardButton(text="🏆 Еженедельный экзамен"),
             KeyboardButton(text="⚙️ Настройки"),
         ],
+        [KeyboardButton(text="🏠 Главное меню")],
     ],
     resize_keyboard=True,
     is_persistent=True,
@@ -35,8 +37,10 @@ BACK = InlineKeyboardMarkup(
 )
 
 MENU_ACTIONS = {
+    "🏠 Главное меню": "menu",
     "📚 Сегодняшний урок": "lesson",
     "🧠 Изучить слова": "words",
+    "🔎 Найти слово": "search",
     "🔁 Повторение": "review",
     "📝 Мини-тест": "quiz",
     "✍️ Writing": "writing",
@@ -45,3 +49,45 @@ MENU_ACTIONS = {
     "🏆 Еженедельный экзамен": "exam",
     "⚙️ Настройки": "settings",
 }
+
+
+def lesson_tasks_keyboard(tasks: list[dict]) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=f"{'✅' if row['done'] else '▫️'} {row['title']}",
+                    callback_data=f"task:{row['key']}",
+                )
+            ]
+            for row in tasks
+        ]
+    )
+
+
+def settings_keyboard(reminders: bool, quiet: bool) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=f"🔔 Напоминания: {'вкл' if reminders else 'выкл'}",
+                    callback_data="settings:reminders",
+                ),
+                InlineKeyboardButton(
+                    text=f"🌙 Тихий режим: {'вкл' if quiet else 'выкл'}",
+                    callback_data="settings:quiet",
+                ),
+            ],
+            [
+                InlineKeyboardButton(text=time, callback_data=f"settings:time:{time}")
+                for time in ("08:00", "12:00", "19:00", "21:00")
+            ],
+        ]
+    )
+
+
+EXAM_SUBMIT = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="🏁 Завершить экзамен", callback_data="exam:submit")]
+    ]
+)

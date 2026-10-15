@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     max_writing_chars: int = Field(default=5000, ge=200, le=20000)
     timezone: str = "Asia/Tashkent"
     reminder_time: str = "19:00"
+    github_token: SecretStr | None = None
+    github_repo: str | None = None
+    github_branch: str = "main"
+    github_notes_path: str = "IELTS Tutor"
 
 
 @lru_cache(maxsize=1)

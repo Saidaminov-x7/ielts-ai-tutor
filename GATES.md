@@ -52,3 +52,13 @@ Scope: Save explicitly requested owner-scoped IELTS content into a private GitHu
 
 - [ ] G11: Railway cold start serves the authenticated Obsidian desktop and clones the private vault without exposing credentials
   MANUAL: Verify the root page streams the desktop after the cold start, `/config/vault` is a Git checkout of the configured private repo, and runtime logs plus the Git remote contain no token.
+
+- [x] G12: initializer safely reuses the persistent checkout after changing its owner to the Obsidian runtime user
+  CHECK: rtk proxy python -m pytest -p no:cov -q tests/test_obsidian_server_config.py && echo VAULT_OWNERSHIP_TESTS_OK
+  EXPECT: VAULT_OWNERSHIP_TESTS_OK
+  EVIDENCE: automatic-evidence=v1; definition-sha256=bd3e6147a26a4745728458f1d1e7e725a066934529f259c073917214a6956e27; exit=0; EXPECT=matched; output-sha256=e815d49edca26c6e8186f4d50fccd66491637ebc4291007d818738fbebb310eb; output-bytes=127; shell=C:\WINDOWS\system32\cmd.exe; cwd=C:\Users\vosil\Desktop\IELTS; path=b11ea96863f8/44 entries
+
+- [x] G13: all project tests pass after the startup fix
+  CHECK: rtk proxy python -m pytest -p no:cov -p no:anyio -q && echo PROJECT_REGRESSION_TESTS_OK
+  EXPECT: PROJECT_REGRESSION_TESTS_OK
+  EVIDENCE: automatic-evidence=v1; definition-sha256=b1aa71dfd2f8e8adef928311d85324aa2eb67586280d1d52d7c118a9f527e3ee; exit=0; EXPECT=matched; output-sha256=500c5f35f4b2227e7882e2a5b9d01303b71ad4892b0ae067438e25bc7f2bc9b1; output-bytes=131; shell=C:\WINDOWS\system32\cmd.exe; cwd=C:\Users\vosil\Desktop\IELTS; path=b11ea96863f8/44 entries

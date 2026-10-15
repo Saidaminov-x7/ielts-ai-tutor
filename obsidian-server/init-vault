@@ -23,6 +23,13 @@ remote="https://github.com/${GITHUB_REPO}.git"
 credential_helper="/usr/local/bin/git-credential-env"
 mkdir -p /config
 
+# The init hook runs as root while the persistent checkout is owned by abc
+# (the Obsidian runtime user). Git's safe.directory protection otherwise
+# rejects the checkout on every restart after the ownership fix below.
+if ! git config --global --get-all safe.directory 2>/dev/null | grep -Fxq "$vault_dir"; then
+  git config --global --add safe.directory "$vault_dir"
+fi
+
 normalize_github_remote() {
   local value="$1"
   value="${value#https://}"

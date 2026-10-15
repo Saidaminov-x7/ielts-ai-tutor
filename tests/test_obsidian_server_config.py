@@ -74,6 +74,14 @@ def test_vault_checkout_is_owned_by_the_obsidian_runtime_user():
     )
 
 
+def test_root_init_trusts_only_the_persistent_vault_owned_by_obsidian_user():
+    initializer = (SERVER / "init-vault").read_text(encoding="utf-8")
+
+    assert 'git config --global --get-all safe.directory' in initializer
+    assert 'git config --global --add safe.directory "$vault_dir"' in initializer
+    assert 'vault_dir="/config/vault"' in initializer
+
+
 def test_vault_origin_check_accepts_equivalent_github_remote_formats():
     initializer = (SERVER / "init-vault").read_text(encoding="utf-8")
 

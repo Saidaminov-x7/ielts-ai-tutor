@@ -23,9 +23,23 @@ remote="https://github.com/${GITHUB_REPO}.git"
 credential_helper="/usr/local/bin/git-credential-env"
 mkdir -p /config
 
+normalize_github_remote() {
+  local value="$1"
+  value="${value#https://}"
+  value="${value#http://}"
+  value="${value#ssh://}"
+  value="${value#git@}"
+  value="${value##*@}"
+  value="${value#github.com/}"
+  value="${value#github.com:}"
+  value="${value%/}"
+  value="${value%.git}"
+  printf '%s' "${value,,}"
+}
+
 if [[ -d "$vault_dir/.git" ]]; then
   current_remote="$(git -C "$vault_dir" remote get-url origin 2>/dev/null || true)"
-  if [[ "$current_remote" != "$remote" ]]; then
+  if [[ "$(normalize_github_remote "$current_remote")" != "$(normalize_github_remote "$remote")" ]]; then
     echo "Vault initialization stopped: existing vault has a different origin."
     exit 1
   fi

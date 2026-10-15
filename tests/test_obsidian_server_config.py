@@ -74,6 +74,16 @@ def test_vault_checkout_is_owned_by_the_obsidian_runtime_user():
     )
 
 
+def test_vault_origin_check_accepts_equivalent_github_remote_formats():
+    initializer = (SERVER / "init-vault").read_text(encoding="utf-8")
+
+    assert "normalize_github_remote()" in initializer
+    assert 'value="${value##*@}"' in initializer
+    assert 'value="${value#github.com:}"' in initializer
+    assert 'value="${value%.git}"' in initializer
+    assert 'normalize_github_remote "$current_remote"' in initializer
+
+
 def test_setup_does_not_contain_tokens_or_public_vault_instruction():
     readme = (SERVER / "README.md").read_text(encoding="utf-8")
     dockerfile = (SERVER / "Dockerfile").read_text(encoding="utf-8")

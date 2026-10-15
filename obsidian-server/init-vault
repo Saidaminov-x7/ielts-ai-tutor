@@ -1,0 +1,53 @@
+#!/usr/bin/with-contenv bash
+set -euo pipefail
+
+vault_dir="/config/vault"
+
+if [[ -z "${GITHUB_TOKEN:-}" ]]; then
+  echo "Vault initialization stopped: GITHUB_TOKEN is not configured."
+  exit 1
+fi
+
+if [[ ! "${GITHUB_REPO:-}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+  echo "Vault initialization stopped: GITHUB_REPO must be owner/repository."
+  exit 1
+fi
+
+branch="${GITHUB_BRANCH:-main}"
+if [[ ! "$branch" =~ ^[A-Za-z0-9._/-]+$ || "$branch" == *..* ]]; then
+  echo "Vault initialization stopped: GITHUB_BRANCH is invalid."
+  exit 1
+fi
+
+remote="https://github.com/${GITHUB_REPO}.git"
+credential_helper="/usr/local/bin/git-credential-env"
+mkdir -p /config
+
+if [[ -d "$vault_dir/.git" ]]; then
+  current_remote="$(git -C "$vault_dir" remote get-url origin 2>/dev/null || true)"
+  if [[ "$current_remote" != "$remote" ]]; then
+    echo "Vault initialization stopped: existing vault has a different origin."
+    exit 1
+  fi
+
+  git -C "$vault_dir" config --local credential.helper "$credential_helper"
+  git -C "$vault_dir" config --local user.name "IELTS Tutor Obsidian"
+  git -C "$vault_dir" config --local user.email "ielts-tutor-obsidian@users.noreply.github.com"
+  if ! git -C "$vault_dir" pull --ff-only origin "$branch" >/dev/null 2>&1; then
+    echo "Vault update stopped: remote changes are not a fast-forward. Resolve the Git conflict before restarting."
+    exit 1
+  fi
+elif [[ -d "$vault_dir" ]] && [[ -n "$(find "$vault_dir" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
+  echo "Vault initialization stopped: non-empty directory has no Git metadata; refusing to overwrite it."
+  exit 1
+else
+  if ! git clone --single-branch --branch "$branch" "$remote" "$vault_dir" >/dev/null 2>&1; then
+    echo "Vault clone failed. Check the private repository, branch, and token permissions."
+    exit 1
+  fi
+  git -C "$vault_dir" config --local credential.helper "$credential_helper"
+  git -C "$vault_dir" config --local user.name "IELTS Tutor Obsidian"
+  git -C "$vault_dir" config --local user.email "ielts-tutor-obsidian@users.noreply.github.com"
+fi
+
+echo "Private Obsidian vault is ready at /config/vault."

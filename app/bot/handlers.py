@@ -172,11 +172,13 @@ async def save_result_handler(message: Message) -> None:
             (exam.submitted_at if exam else None, "Exam", exam),
             (quiz.submitted_at if quiz else None, "Quiz", quiz),
         ]
-        _, kind, result = max(candidates, key=lambda row: row[0] or datetime.min)
+        _, _, result = max(candidates, key=lambda row: row[0] or datetime.min)
         if result is None:
             await answer(message, "Нет завершённого результата для сохранения.")
             return
-        if kind == "Writing":
+        if isinstance(result, WritingAttempt):
+            kind = "Writing"
+            created_at = result.created_at
             feedback = json.loads(result.feedback_json)
             title = f"Writing {result.task_type} band {result.estimated_band}"
             feedback_md = json.dumps(feedback, ensure_ascii=False, indent=2)
@@ -184,10 +186,12 @@ async def save_result_handler(message: Message) -> None:
                 f"Оценка: {result.estimated_band}/9\n\n## Разбор\n\n"
                 f"```json\n{feedback_md}\n```"
             )
-        else:
+        elif isinstance(result, ExamSession):
+            kind = "Exam"
+            created_at = result.submitted_at or result.started_at
             questions = json.loads(result.questions_json)
             answers = json.loads(result.answers_json)
-            title = f"{kind} result {result.id}"
+            title = f"Exam result {result.id}"
             body = (
                 f"Результат: {result.score}\n\n"
                 f"## Вопросы\n\n```json\n"
@@ -195,7 +199,20 @@ async def save_result_handler(message: Message) -> None:
                 f"## Ответы\n\n```json\n"
                 f"{json.dumps(answers, ensure_ascii=False, indent=2)}\n```"
             )
-        created = (getattr(result, "submitted_at", None) or result.created_at).isoformat()
+        else:
+            kind = "Quiz"
+            created_at = result.submitted_at or result.created_at
+            questions = json.loads(result.questions_json)
+            answers = json.loads(result.answers_json)
+            title = f"Quiz result {result.id}"
+            body = (
+                f"Результат: {result.score}\n\n"
+                f"## Вопросы\n\n```json\n"
+                f"{json.dumps(questions, ensure_ascii=False, indent=2)}\n```\n\n"
+                f"## Ответы\n\n```json\n"
+                f"{json.dumps(answers, ensure_ascii=False, indent=2)}\n```"
+            )
+        created = created_at.isoformat()
     body = f"Дата: {created}\n\n{body}"
     await _save_obsidian(message, title, kind, body)
 
@@ -800,7 +817,7 @@ async def update_settings_callback(callback: CallbackQuery) -> None:
         session.commit()
         reminders_enabled, quiet_mode = row.reminders_enabled, row.quiet_mode
     await callback.answer(notice)
-    if callback.message:
+    if isinstance(callback.message, Message):
         await callback.message.edit_reply_markup(
             reply_markup=settings_keyboard(reminders_enabled, quiet_mode)
         )

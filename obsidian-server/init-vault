@@ -38,7 +38,7 @@ normalize_github_remote() {
 }
 
 if [[ -d "$vault_dir/.git" ]]; then
-  current_remote="$(git -C "$vault_dir" remote get-url origin 2>/dev/null || true)"
+  current_remote="$(git -C "$vault_dir" config --local --get remote.origin.url 2>/dev/null || true)"
   if [[ "$(normalize_github_remote "$current_remote")" != "$(normalize_github_remote "$remote")" ]]; then
     echo "Vault initialization stopped: existing vault has a different origin."
     exit 1

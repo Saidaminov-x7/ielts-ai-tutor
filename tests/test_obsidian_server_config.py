@@ -82,6 +82,8 @@ def test_vault_origin_check_accepts_equivalent_github_remote_formats():
     assert 'value="${value#github.com:}"' in initializer
     assert 'value="${value%.git}"' in initializer
     assert 'normalize_github_remote "$current_remote"' in initializer
+    assert "config --local --get remote.origin.url" in initializer
+    assert "remote get-url origin" not in initializer
 
 
 def test_setup_does_not_contain_tokens_or_public_vault_instruction():

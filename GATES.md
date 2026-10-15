@@ -62,3 +62,25 @@ Scope: Save explicitly requested owner-scoped IELTS content into a private GitHu
   CHECK: rtk proxy python -m pytest -p no:cov -p no:anyio -q && echo PROJECT_REGRESSION_TESTS_OK
   EXPECT: PROJECT_REGRESSION_TESTS_OK
   EVIDENCE: automatic-evidence=v1; definition-sha256=b1aa71dfd2f8e8adef928311d85324aa2eb67586280d1d52d7c118a9f527e3ee; exit=0; EXPECT=matched; output-sha256=500c5f35f4b2227e7882e2a5b9d01303b71ad4892b0ae067438e25bc7f2bc9b1; output-bytes=131; shell=C:\WINDOWS\system32\cmd.exe; cwd=C:\Users\vosil\Desktop\IELTS; path=b11ea96863f8/44 entries
+
+- [x] G14: Obsidian, n8n, and server configuration integration tests pass in this verification
+  CHECK: rtk proxy python -m pytest -p no:cov -p no:anyio -q tests/test_obsidian_integration.py tests/test_n8n_workflow_exports.py tests/test_obsidian_server_config.py
+  EXPECT: 22 passed
+  EVIDENCE: 22 passed in 9.16s.
+
+- [x] G15: project regression suite passes in this verification
+  CHECK: rtk proxy python -m pytest -p no:cov -p no:anyio -q
+  EXPECT: 55 passed
+  EVIDENCE: 55 passed in 31.59s.
+
+- [x] G16: live Telegram bot and n8n health endpoints return HTTP 200
+  MANUAL: GET /health on ielts-webhook and GET /healthz on ielts-n8n; both returned {"status":"ok"}. These checks wake the bot.
+  EVIDENCE: Chrome and direct HTTP responses both showed 200 OK on 2026-10-15 UTC.
+
+- [x] G17: daily lesson trigger is scheduled as an idle Railway Cron job and n8n's duplicate schedule is unpublished
+  MANUAL: Railway reports ielts-daily-trigger cronSchedule=0 19 * * * UTC, cronReady, and zero running replicas. The published n8n Daily IELTS Lesson workflow was unpublished after confirming its trigger is every day at midnight with GENERIC_TIMEZONE configured.
+  EVIDENCE: The existing one-shot Python trigger has three retries and posts to the idempotent /internal/daily endpoint. Its next scheduled Telegram delivery has not yet been observed.
+
+- [x] G18: n8n Serverless is enabled and redeployed with no active scheduled workflow
+  MANUAL: Railway deployment f9eef526-19de-4cc1-ba7a-2234ce7406a3 reached SUCCESS; sleepApplication=true. The n8n workflow is saved but unpublished.
+  EVIDENCE: ielts-webhook was directly observed SLEEPING with CPU and memory metrics at zero after the health check. Railway documents a 5-10 minute sleep window, not one minute. Obsidian app/auth and n8n remained Online while their authenticated browser tabs were still open, so their idle sleep is pending closing those sessions and rechecking.

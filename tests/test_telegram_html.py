@@ -24,7 +24,7 @@ async def test_search_escapes_untrusted_vocabulary_for_telegram_html(session, mo
         messages.append(text)
 
     message = SimpleNamespace(
-        text="/search word",
+        text="word",
         from_user=SimpleNamespace(id=17),
         answer=reply,
     )

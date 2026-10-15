@@ -188,3 +188,15 @@ class UserSettings(Base):
     streak: Mapped[int] = mapped_column(Integer, default=0)
     max_streak: Mapped[int] = mapped_column(Integer, default=0)
     completed_days: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class ObsidianSave(Base):
+    """Idempotency ledger for explicit Telegram-to-vault saves."""
+
+    __tablename__ = "obsidian_saves"
+    __table_args__ = (UniqueConstraint("owner_id", "update_id", name="uq_obsidian_save_update"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner_id: Mapped[int] = mapped_column(Integer, index=True)
+    update_id: Mapped[int] = mapped_column(Integer)
+    path: Mapped[str] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))

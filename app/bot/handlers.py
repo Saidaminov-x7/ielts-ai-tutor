@@ -4,11 +4,12 @@ from html import escape
 from types import SimpleNamespace
 
 from aiogram import F, Router
-from aiogram.filters import CommandStart
+from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message, User
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.ai.writing_examiner import examine
 from app.bot.keyboards import (
@@ -19,16 +20,26 @@ from app.bot.keyboards import (
     lesson_tasks_keyboard,
     settings_keyboard,
 )
+from app.config import get_settings
 from app.database.models import (
     Activity,
     ErrorLog,
     ExamSession,
+    ObsidianSave,
     QuizSession,
     ReviewSession,
     UserSettings,
     Vocabulary,
+    WritingAttempt,
 )
 from app.database.session import SessionLocal
+from app.integrations.obsidian import (
+    GitHubVault,
+    ObsidianAPIError,
+    ObsidianNotConfigured,
+    note_path,
+    render_note,
+)
 from app.learning.adaptive import adapt_day
 from app.learning.daily_tests import answer_quiz, start_quiz, submit_quiz
 from app.learning.lessons import complete_task, current_day, finish_day, lesson_summary
@@ -54,8 +65,220 @@ class WordState(StatesGroup):
     awaiting_search = State()
 
 
+class ObsidianState(StatesGroup):
+    awaiting_note = State()
+
+
 async def answer(message: Message, text: str, **kwargs) -> None:
     await message.answer(text, **kwargs)
+
+
+def _github_vault() -> GitHubVault:
+    return GitHubVault(get_settings())
+
+
+async def _save_obsidian(message: Message, title: str, category: str, body: str) -> None:
+    uid = owner_id(message.from_user)
+    update_id = message.message_id
+    with SessionLocal() as session:
+        prior = session.scalar(
+            select(ObsidianSave).where(
+                ObsidianSave.owner_id == uid, ObsidianSave.update_id == update_id
+            )
+        )
+        if prior:
+            await answer(message, "Эта заметка уже сохранена.")
+            return
+        path = note_path(get_settings().github_notes_path, category, title, update_id)
+        content = render_note(title, category, uid, body)
+        # Reserve this Telegram message before making the external side effect.
+        # The unique constraint prevents concurrent duplicate update handling.
+        reservation = ObsidianSave(owner_id=uid, update_id=update_id, path=path)
+        session.add(reservation)
+        try:
+            session.commit()
+        except IntegrityError:
+            session.rollback()
+            await answer(message, "Эта заметка уже сохранена.")
+            return
+        try:
+            await _github_vault().write(path, content)
+        except ObsidianNotConfigured:
+            session.delete(reservation)
+            session.commit()
+            await answer(
+                message,
+                "Интеграция Obsidian не настроена. Обратитесь к администратору бота.",
+            )
+            return
+        except ObsidianAPIError:
+            session.delete(reservation)
+            session.commit()
+            await answer(
+                message,
+                "GitHub не сохранил заметку. Попробуйте позже или проверьте настройки.",
+            )
+            return
+    await answer(message, f"Сохранено в Obsidian: <code>{escape(path)}</code>")
+
+
+@router.message(Command("obsidian"))
+async def obsidian_check(message: Message) -> None:
+    try:
+        destination = await _github_vault().check()
+    except ObsidianNotConfigured:
+        await answer(
+            message,
+            "Интеграция Obsidian не настроена. Обратитесь к администратору бота.",
+        )
+    except ObsidianAPIError:
+        await answer(
+            message,
+            "Не удалось проверить GitHub vault. Проверьте доступ к приватному репозиторию.",
+        )
+    else:
+        await answer(message, f"GitHub vault подключён: <code>{escape(destination)}</code>")
+
+
+@router.message(Command("save"))
+async def save_note_handler(message: Message) -> None:
+    text = (message.text or "").partition(" ")[2].strip()
+    if not text:
+        await answer(message, "Использование: <code>/save текст заметки</code>")
+        return
+    await _save_obsidian(message, "Заметка", "Notes", text)
+
+
+@router.message(Command("save_result"))
+async def save_result_handler(message: Message) -> None:
+    uid = owner_id(message.from_user)
+    with SessionLocal() as session:
+        writing = session.scalar(
+            select(WritingAttempt).where(WritingAttempt.owner_id == uid)
+            .order_by(WritingAttempt.created_at.desc())
+        )
+        exam = session.scalar(
+            select(ExamSession).where(
+                ExamSession.owner_id == uid, ExamSession.submitted_at.is_not(None)
+            ).order_by(ExamSession.submitted_at.desc())
+        )
+        quiz = session.scalar(
+            select(QuizSession).where(
+                QuizSession.owner_id == uid, QuizSession.submitted_at.is_not(None)
+            ).order_by(QuizSession.submitted_at.desc())
+        )
+        candidates = [
+            (writing.created_at if writing else None, "Writing", writing),
+            (exam.submitted_at if exam else None, "Exam", exam),
+            (quiz.submitted_at if quiz else None, "Quiz", quiz),
+        ]
+        _, _, result = max(candidates, key=lambda row: row[0] or datetime.min)
+        if result is None:
+            await answer(message, "Нет завершённого результата для сохранения.")
+            return
+        if isinstance(result, WritingAttempt):
+            kind = "Writing"
+            created_at = result.created_at
+            feedback = json.loads(result.feedback_json)
+            title = f"Writing {result.task_type} band {result.estimated_band}"
+            feedback_md = json.dumps(feedback, ensure_ascii=False, indent=2)
+            body = (
+                f"Оценка: {result.estimated_band}/9\n\n## Разбор\n\n"
+                f"```json\n{feedback_md}\n```"
+            )
+        elif isinstance(result, ExamSession):
+            kind = "Exam"
+            created_at = result.submitted_at or result.started_at
+            questions = json.loads(result.questions_json)
+            answers = json.loads(result.answers_json)
+            title = f"Exam result {result.id}"
+            body = (
+                f"Результат: {result.score}\n\n"
+                f"## Вопросы\n\n```json\n"
+                f"{json.dumps(questions, ensure_ascii=False, indent=2)}\n```\n\n"
+                f"## Ответы\n\n```json\n"
+                f"{json.dumps(answers, ensure_ascii=False, indent=2)}\n```"
+            )
+        else:
+            kind = "Quiz"
+            created_at = result.submitted_at or result.created_at
+            questions = json.loads(result.questions_json)
+            answers = json.loads(result.answers_json)
+            title = f"Quiz result {result.id}"
+            body = (
+                f"Результат: {result.score}\n\n"
+                f"## Вопросы\n\n```json\n"
+                f"{json.dumps(questions, ensure_ascii=False, indent=2)}\n```\n\n"
+                f"## Ответы\n\n```json\n"
+                f"{json.dumps(answers, ensure_ascii=False, indent=2)}\n```"
+            )
+        created = created_at.isoformat()
+    body = f"Дата: {created}\n\n{body}"
+    await _save_obsidian(message, title, kind, body)
+
+
+@router.message(Command("save_word"))
+async def save_word_handler(message: Message) -> None:
+    uid = owner_id(message.from_user)
+    query = (message.text or "").partition(" ")[2].strip()
+    with SessionLocal() as session:
+        stmt = select(Vocabulary).where(Vocabulary.owner_id == uid)
+        if query:
+            needle = f"%{query}%"
+            stmt = stmt.where(
+                (Vocabulary.english.ilike(needle)) | (Vocabulary.translation.ilike(needle))
+            )
+        word = session.scalar(stmt.order_by(Vocabulary.learned_at.desc()).limit(1))
+        if word is None:
+            await answer(
+                message,
+                "Личное слово не найдено. Добавьте слово в словарь или укажите часть слова: "
+                "<code>/save_word apple</code>",
+            )
+            return
+        title = f"{word.english} — {word.translation}"
+        body = (
+            f"**Перевод:** {word.translation}\n\n"
+            f"**Транскрипция:** {word.transcription or '—'}\n\n"
+            f"**Пример:** {word.example or '—'}\n\n"
+            f"**Тема:** {word.topic or '—'}"
+        )
+    await _save_obsidian(message, title, "Vocabulary", body)
+
+
+@router.message(Command("save_lesson"))
+async def save_lesson_handler(message: Message) -> None:
+    uid = owner_id(message.from_user)
+    with SessionLocal() as session:
+        data = lesson_summary(session, uid)
+    title = f"Lesson day {data['day']} — {data['topic']}"
+    task_lines = "\n".join(
+        f"- [{'x' if task['done'] else ' '}] {task['title']} ({task['minutes']} min)"
+        for task in data["tasks"]
+    )
+    body = (
+        f"Week: {data['week']}\n\n"
+        f"Topic: {data['topic']}\n\n"
+        f"## Grammar\n\n{data['grammar'] or '—'}\n\n"
+        f"## Reading\n\n{data['reading']}\n\n"
+        f"## Listening\n\n{data['listening']}\n\n"
+        f"## Writing\n\n{data['writing']}\n\n"
+        f"## Tasks\n\n{task_lines}\n\n"
+        f"Remaining tasks: {data['remaining']}"
+    )
+    await _save_obsidian(message, title, "Lessons", body)
+
+
+@router.message(Command("save_note"))
+async def save_note_prompt(message: Message, state: FSMContext) -> None:
+    await state.set_state(ObsidianState.awaiting_note)
+    await answer(message, "Отправьте следующим сообщением текст заметки для Obsidian.")
+
+
+@router.message(ObsidianState.awaiting_note, F.text)
+async def save_note_text(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    await _save_obsidian(message, "Заметка", "Notes", message.text or "")
 
 
 @router.message(CommandStart())
@@ -186,9 +409,10 @@ async def search_start(message: Message, state: FSMContext) -> None:
 
 
 @router.message(WordState.awaiting_search, F.text)
-async def search(message: Message, state: FSMContext) -> None:
+async def search(message: Message, state: FSMContext | None = None) -> None:
     query = (message.text or "").strip()
-    await state.clear()
+    if state is not None:
+        await state.clear()
     with SessionLocal() as session:
         found = search_words(session, query, owner_id(message.from_user))
     await answer(
@@ -593,7 +817,7 @@ async def update_settings_callback(callback: CallbackQuery) -> None:
         session.commit()
         reminders_enabled, quiet_mode = row.reminders_enabled, row.quiet_mode
     await callback.answer(notice)
-    if callback.message:
+    if isinstance(callback.message, Message):
         await callback.message.edit_reply_markup(
             reply_markup=settings_keyboard(reminders_enabled, quiet_mode)
         )

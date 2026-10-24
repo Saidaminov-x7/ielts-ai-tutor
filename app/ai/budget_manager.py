@@ -18,11 +18,10 @@ def reserve(session: Session, owner_id: int, input_tokens: int, output_tokens: i
     input_rate = settings.ai_input_price_per_million / 1_000_000
     output_rate = settings.ai_output_price_per_million / 1_000_000
     reservation = input_tokens * input_rate + output_tokens * output_rate
-    start = now.replace(day=1)
     existing = float(
         session.scalar(
             select(func.sum(AIUsage.reserved_usd + AIUsage.actual_usd)).where(
-                AIUsage.month == month
+                AIUsage.month == month, AIUsage.provider == "openai"
             )
         )
         or 0
@@ -31,8 +30,8 @@ def reserve(session: Session, owner_id: int, input_tokens: int, output_tokens: i
         session.scalar(
             select(func.count(AIUsage.id)).where(
                 AIUsage.owner_id == owner_id,
-                AIUsage.request_date >= start,
-                AIUsage.request_date <= now,
+                AIUsage.provider == "openai",
+                AIUsage.request_date == now,
             )
         )
         or 0

@@ -1,0 +1,12 @@
+The CMU Pronouncing Dictionary is Copyright (C) 1993-2015 by Carnegie Mellon University.
+
+Use of this dictionary is permitted under the CMUdict license, including use,
+copying, modification, redistribution, and sale, provided that this copyright
+notice and permission notice appear in all copies and supporting documentation.
+
+THE DICTIONARY IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE DICTIONARY OR THE USE OR OTHER DEALINGS IN IT.

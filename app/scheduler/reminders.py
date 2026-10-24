@@ -8,6 +8,7 @@ from sqlalchemy import select
 from app.config import get_settings
 from app.database.models import UserSettings
 from app.database.session import SessionLocal
+from app.learning.lessons import lesson_summary
 
 
 async def send_reminder(bot: Bot, owner_id: int, kind: str) -> None:
@@ -15,8 +16,18 @@ async def send_reminder(bot: Bot, owner_id: int, kind: str) -> None:
         settings = session.get(UserSettings, owner_id)
         if not settings or not settings.reminders_enabled or settings.quiet_mode:
             return
+        summary = lesson_summary(session, owner_id)
+        if summary.get("content_granularity") == "weekly" and kind == "lesson":
+            pending = [task for task in summary["tasks"] if task["available"] and not task["done"]]
+            text = (
+                f"📚 День {summary['day']}/210 · неделя {summary['week']}/30. "
+                f"Тема: {summary['topic']}. "
+                f"{pending[0]['title'] if pending else 'Занятия на сегодня завершены.'}"
+            )
+            await bot.send_message(owner_id, text)
+            return
         text = {
-            "lesson": f"📚 Пора начать учебный день {settings.current_day}/182.",
+            "lesson": f"📚 Пора начать учебный день {settings.current_day}/210.",
             "weekly": "📊 Откройте кнопку «📊 Мой прогресс» внизу чата.",
         }.get(kind, "🔁 Проверьте слова, ожидающие повторения.")
     await bot.send_message(owner_id, text)

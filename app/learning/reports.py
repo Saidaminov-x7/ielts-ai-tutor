@@ -27,16 +27,16 @@ def progress_report(session: Session, owner_id: int) -> str:
         .order_by(WritingAttempt.created_at.desc())
         .limit(5)
     ).all()
-    week = min(26, (settings.current_day - 1) // 7 + 1)
+    week = min(30, max(1, (settings.current_day - 1) // 7 + 1))
     return (
-        f"📊 Неделя {week}/26 · день {settings.current_day}/182\n"
+        f"📊 Неделя {week}/30 · день {settings.current_day}/210\n"
         f"Завершено учебных дней: {settings.completed_days}\nСерия: {settings.streak} дн. "
         f"(рекорд {settings.max_streak})\nСлов в словаре: {words}\n"
         "Средний результат объективных заданий: "
         f"{round(float(score), 1) if score is not None else 'пока нет данных'}%\n"
         "Writing (последние оценки ИИ): "
         f"{', '.join(map(str, writing)) if writing else 'пока нет данных'}\n"
-        f"Выполнение программы: {round(settings.completed_days / 182 * 100, 1)}%\n"
+        f"Выполнение программы: {round(settings.completed_days / 210 * 100, 1)}%\n"
         "Оценка не является официальным IELTS Band Score."
     )
 
@@ -62,12 +62,18 @@ def weekly_progress_report(session: Session, owner_id: int, *, now: datetime | N
     )
     lessons = sum(activity.kind == "lesson" for activity in activities)
     reviews = [activity for activity in activities if activity.kind == "review"]
-    tests = [activity for activity in activities if activity.kind in {"quiz", "weekly_exam"}]
-    avg_test = sum(activity.score for activity in tests) / len(tests) if tests else None
+    tests = [
+        activity
+        for activity in activities
+        if activity.kind in {"quiz", "weekly_exam"} and activity.score is not None
+    ]
+    test_scores = [activity.score for activity in tests if activity.score is not None]
+    avg_test = sum(test_scores) / len(test_scores) if test_scores else None
     topic_scores: dict[str, list[float]] = {}
     for activity in tests:
         if activity.topic:
-            topic_scores.setdefault(activity.topic, []).append(activity.score)
+            if activity.score is not None:
+                topic_scores.setdefault(activity.topic, []).append(activity.score)
     weakest = min(
         ((sum(scores) / len(scores), topic) for topic, scores in topic_scores.items()),
         default=None,
@@ -93,14 +99,15 @@ def weekly_progress_report(session: Session, owner_id: int, *, now: datetime | N
         .order_by(WritingAttempt.created_at.desc())
         .limit(1)
     )
+    review_scores = [activity.score for activity in reviews if activity.score is not None]
     lines = [
         "📊 Статистика за последние 7 дней",
         f"Завершено учебных дней: {lessons}",
         f"Добавлено личных слов: {new_words}",
         f"Повторений слов: {len(reviews)}"
         + (
-            f" · средняя точность {round(sum(a.score for a in reviews) / len(reviews))}%"
-            if reviews
+            f" · средняя точность {round(sum(review_scores) / len(review_scores))}%"
+            if review_scores
             else ""
         ),
         f"Объективных тестов: {len(tests)}"

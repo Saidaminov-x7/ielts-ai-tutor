@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.database.models import AIUsage, ScheduledEvent, TaskProgress, UserSettings
-from app.learning.lessons import TASKS
+from app.learning.lessons import TASKS, lesson_summary
 from app.learning.reports import weekly_progress_report
 from app.learning.vocabulary import due_words
 
@@ -46,6 +46,19 @@ def event_message(
     if event_type == "daily_mini_test":
         return "📝 Ежедневный мини-тест готов. Откройте его кнопкой «📝 Мини-тест».", "sent"
     if event_type == "smart_reminders":
+        summary = lesson_summary(session, owner_id, current_day)
+        if summary.get("content_granularity") == "weekly":
+            remaining = [
+                task for task in summary["tasks"] if task["available"] and not task["done"]
+            ]
+            if not remaining:
+                return None, "skipped"
+            title = remaining[0]["title"]
+            message = (
+                f"📚 На сегодня: {escape(title)} по теме недели "
+                f"«{escape(str(summary['topic']))}». Откройте Mini App."
+            )
+            return message, "sent"
         completed = set(
             session.scalars(
                 select(TaskProgress.task_key).where(
@@ -67,9 +80,9 @@ def event_message(
             "sent",
         )
     if event_type == "weekly_ielts_exam":
-        week = min(26, (current_day - 1) // 7 + 1)
+        week = min(30, max(1, (current_day - 1) // 7 + 1))
         return (
-            f"📋 Пора пройти контрольный экзамен недели {week}/26. "
+            f"📋 Пора пройти контрольный экзамен недели {week}/30. "
             "Откройте его кнопкой «🏆 Еженедельный экзамен» внизу чата.",
             "sent",
         )

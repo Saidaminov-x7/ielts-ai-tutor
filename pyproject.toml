@@ -7,7 +7,7 @@ name = "ielts-ai-tutor"
 version = "0.1.0"
 description = "Private Telegram IELTS Academic tutor"
 requires-python = ">=3.12"
-dependencies = ["aiogram>=3.7,<4", "aiohttp>=3.9,<4", "SQLAlchemy>=2,<3", "alembic>=1.13,<2", "APScheduler>=3.10,<4", "openai>=1.30,<3", "pydantic-settings>=2,<3", "openpyxl>=3.1,<4"]
+dependencies = ["aiogram>=3.7,<4", "aiohttp>=3.9,<4", "SQLAlchemy>=2,<3", "alembic>=1.13,<2", "APScheduler>=3.10,<4", "openai>=1.30,<3", "google-genai>=1.30,<2", "pydantic-settings>=2,<3", "openpyxl>=3.1,<4", "pypdf>=5,<7"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "pytest-asyncio>=0.23", "ruff>=0.6", "mypy>=1.10"]

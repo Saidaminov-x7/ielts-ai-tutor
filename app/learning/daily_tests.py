@@ -80,6 +80,228 @@ QUESTIONS = [
     },
 ]
 
+# A validated local question bank for weekly practice. Keeping this content in
+# code means the exam remains usable when the optional course workbook has not
+# been imported. Questions are objective and graded locally.
+WEEKLY_QUESTIONS = QUESTIONS + [
+    {
+        "topic": "Present Perfect",
+        "question": "I ___ in Tashkent since 2020.",
+        "options": ["live", "lived", "have lived", "am living"],
+        "answer": 2,
+        "explanation": "Since with a continuing situation uses the present perfect.",
+    },
+    {
+        "topic": "Present Perfect",
+        "question": "Have you ever ___ sushi?",
+        "options": ["eat", "ate", "eaten", "eating"],
+        "answer": 2,
+        "explanation": "The present perfect takes the past participle: eaten.",
+    },
+    {
+        "topic": "Past Continuous",
+        "question": "I ___ when the phone rang.",
+        "options": ["studied", "was studying", "am studying", "have studied"],
+        "answer": 1,
+        "explanation": (
+            "Past continuous describes an action in progress interrupted by another past event."
+        ),
+    },
+    {
+        "topic": "Past Perfect",
+        "question": "The train ___ before we reached the station.",
+        "options": ["leaves", "has left", "had left", "was leaving"],
+        "answer": 2,
+        "explanation": "Past perfect marks the earlier of two past events.",
+    },
+    {
+        "topic": "Future forms",
+        "question": "Look at those clouds! It ___ soon.",
+        "options": ["rains", "will have rained", "is going to rain", "would rain"],
+        "answer": 2,
+        "explanation": "Be going to is natural for a prediction based on present evidence.",
+    },
+    {
+        "topic": "First Conditional",
+        "question": "If you ___ now, you will catch the bus.",
+        "options": ["leave", "will leave", "left", "would leave"],
+        "answer": 0,
+        "explanation": "The first conditional uses present simple in the if-clause.",
+    },
+    {
+        "topic": "Second Conditional",
+        "question": "If I ___ more free time, I would learn Spanish.",
+        "options": ["have", "will have", "had", "would have"],
+        "answer": 2,
+        "explanation": "The second conditional uses past simple after if.",
+    },
+    {
+        "topic": "Third Conditional",
+        "question": "If she had set an alarm, she ___ the meeting.",
+        "options": ["would not miss", "would not have missed", "did not miss", "will not miss"],
+        "answer": 1,
+        "explanation": "The third conditional uses would have plus a past participle.",
+    },
+    {
+        "topic": "Passive Voice",
+        "question": "The new library ___ by the city council next year.",
+        "options": ["will open", "will be opened", "opens", "has opening"],
+        "answer": 1,
+        "explanation": "The passive future is will be plus a past participle.",
+    },
+    {
+        "topic": "Passive Voice",
+        "question": "This painting ___ by a local artist in 1998.",
+        "options": ["created", "was created", "has created", "is creating"],
+        "answer": 1,
+        "explanation": "Use past simple passive for a completed past action with an agent.",
+    },
+    {
+        "topic": "Reported Speech",
+        "question": "He said that he ___ tired.",
+        "options": ["is", "was", "will be", "has been"],
+        "answer": 1,
+        "explanation": (
+            "In standard reported speech, present simple commonly shifts back to past simple."
+        ),
+    },
+    {
+        "topic": "Relative Clauses",
+        "question": "The woman ___ lives next door is a doctor.",
+        "options": ["which", "whose", "who", "where"],
+        "answer": 2,
+        "explanation": (
+            "Who refers to a person performing the action in a defining relative clause."
+        ),
+    },
+    {
+        "topic": "Relative Clauses",
+        "question": "That's the café ___ we first met.",
+        "options": ["who", "which", "where", "whose"],
+        "answer": 2,
+        "explanation": "Where introduces a relative clause about a place.",
+    },
+    {
+        "topic": "Gerunds and Infinitives",
+        "question": "They decided ___ the earlier train.",
+        "options": ["take", "taking", "to take", "taken"],
+        "answer": 2,
+        "explanation": "Decide is followed by a to-infinitive.",
+    },
+    {
+        "topic": "Gerunds and Infinitives",
+        "question": "She avoids ___ late at night.",
+        "options": ["drive", "to drive", "driving", "drove"],
+        "answer": 2,
+        "explanation": "Avoid is followed by a gerund.",
+    },
+    {
+        "topic": "Articles",
+        "question": "Mount Everest is ___ highest mountain in the world.",
+        "options": ["a", "an", "the", "no article"],
+        "answer": 2,
+        "explanation": "Superlative adjectives normally take the.",
+    },
+    {
+        "topic": "Articles",
+        "question": "My brother is ___ engineer.",
+        "options": ["a", "an", "the", "no article"],
+        "answer": 1,
+        "explanation": "Engineer begins with a vowel sound, so use an.",
+    },
+    {
+        "topic": "Quantifiers",
+        "question": "There is ___ information in the report to answer the question.",
+        "options": ["too many", "enough", "few", "many"],
+        "answer": 1,
+        "explanation": "Information is uncountable; enough can describe a sufficient amount.",
+    },
+    {
+        "topic": "Quantifiers",
+        "question": "___ students chose the optional course, so it was cancelled.",
+        "options": ["a few", "few", "a little", "much"],
+        "answer": 1,
+        "explanation": "Few with a plural countable noun means not enough.",
+    },
+    {
+        "topic": "Comparatives",
+        "question": "This explanation is ___ than the one in the textbook.",
+        "options": ["clear", "clearest", "more clear", "clearer"],
+        "answer": 3,
+        "explanation": "The comparative of the short adjective clear is clearer.",
+    },
+    {
+        "topic": "Comparatives",
+        "question": "The more you practise, ___ you become.",
+        "options": ["the confident", "more confident", "the more confident", "most confident"],
+        "answer": 2,
+        "explanation": "This correlative structure is the more..., the more...",
+    },
+    {
+        "topic": "Modal Verbs",
+        "question": "You ___ submit the form by Friday; it is a strict requirement.",
+        "options": ["might", "must", "would", "could"],
+        "answer": 1,
+        "explanation": "Must expresses a strong obligation.",
+    },
+    {
+        "topic": "Modal Verbs",
+        "question": "She ___ be at home; all the lights are off and her car is gone.",
+        "options": ["must", "can't", "should", "has to"],
+        "answer": 1,
+        "explanation": "Can't expresses a strong negative deduction from evidence.",
+    },
+    {
+        "topic": "Prepositions",
+        "question": "The research focuses ___ the effects of sleep on memory.",
+        "options": ["at", "in", "on", "for"],
+        "answer": 2,
+        "explanation": "The collocation is focus on something.",
+    },
+    {
+        "topic": "Prepositions",
+        "question": "She is responsible ___ organising the event.",
+        "options": ["of", "for", "to", "with"],
+        "answer": 1,
+        "explanation": "The adjective responsible is followed by for.",
+    },
+    {
+        "topic": "Linking Words",
+        "question": "The sample was small; ___, the results should be treated cautiously.",
+        "options": ["however", "therefore", "for example", "meanwhile"],
+        "answer": 1,
+        "explanation": "Therefore introduces a result or conclusion.",
+    },
+    {
+        "topic": "Linking Words",
+        "question": "___ the high cost, the project went ahead.",
+        "options": ["Although", "Despite", "Because", "However"],
+        "answer": 1,
+        "explanation": "Despite is followed by a noun phrase, not a full clause.",
+    },
+    {
+        "topic": "Word Formation",
+        "question": "The study provides ___ evidence for the theory.",
+        "options": ["convince", "convinced", "convincing", "convincingly"],
+        "answer": 2,
+        "explanation": "An adjective is needed before the noun evidence.",
+    },
+    {
+        "topic": "Word Formation",
+        "question": "Regular exercise can improve both physical and mental ___.",
+        "options": ["healthy", "health", "healthily", "healthier"],
+        "answer": 1,
+        "explanation": "A noun is needed after both and before the implied condition/state.",
+    },
+    {
+        "topic": "Collocations",
+        "question": "The government plans to ___ a survey on public transport.",
+        "options": ["make", "do", "conduct", "perform up"],
+        "answer": 2,
+        "explanation": "Conduct a survey is the standard academic collocation.",
+    },
+]
+
 
 def daily_quiz(session: Session, owner_id: int, day: int) -> list[dict]:
     attempts = list(

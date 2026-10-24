@@ -76,6 +76,7 @@ async def examine(
                 task_type=parsed.task_type,
                 estimated_band=parsed.estimated_band,
                 feedback_json=parsed.model_dump_json(),
+                submission_text=clean_text,
             )
         )
         session.add(

@@ -50,6 +50,46 @@ def test_budget_limit_blocks_next_request(session, monkeypatch):
         reserve(session, 1, 2000, 100)
 
 
+def test_daily_request_limit_ignores_earlier_days_in_month(session, monkeypatch):
+    from datetime import date
+
+    from app.ai import budget_manager
+    from app.database.models import AIUsage
+
+    today = date(2026, 10, 19)
+
+    class FixedDate(date):
+        @classmethod
+        def today(cls):
+            return today
+
+    monkeypatch.setattr(budget_manager, "date", FixedDate)
+    monkeypatch.setattr(
+        budget_manager,
+        "get_settings",
+        lambda: Settings(
+            monthly_ai_budget_usd=5,
+            ai_input_price_per_million=0,
+            ai_output_price_per_million=0,
+            max_daily_ai_requests=1,
+        ),
+    )
+    session.add(
+        AIUsage(
+            owner_id=1,
+            month="2026-10",
+            request_date=date(2026, 10, 18),
+            reserved_usd=0,
+            actual_usd=0,
+        )
+    )
+    session.commit()
+
+    usage = reserve(session, 1, 10, 10)
+
+    assert usage.request_date == today
+
+
 def test_user_input_prompt_is_structured_in_examiner_source():
     from pathlib import Path
 

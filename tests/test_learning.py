@@ -2,22 +2,58 @@ from datetime import date
 
 from app.database.models import Activity, CourseDay, Vocabulary
 from app.learning.adaptive import adapt_day, recommendation, weak_topics
-from app.learning.daily_tests import QUESTIONS, answer_quiz, grade_quiz, start_quiz, submit_quiz
+from app.learning.daily_tests import (
+    QUESTIONS,
+    WEEKLY_QUESTIONS,
+    answer_quiz,
+    grade_quiz,
+    start_quiz,
+    submit_quiz,
+)
 from app.learning.lessons import TASKS, complete_task, finish_day, lesson_summary
 from app.learning.vocabulary import due_words, record_review
 from app.learning.weekly_exams import record_exam_answer, start_exam, submit_exam
 
 
 def test_progress_only_finishes_after_every_task(session):
-    session.add(CourseDay(day_number=1, week_number=1, topic="Present simple"))
+    session.add(
+        CourseDay(
+            day_number=1,
+            week_number=1,
+            topic="Present simple",
+            grammar="Present simple practice",
+            reading="Short reading text",
+            listening="Listening transcript",
+            writing="Writing prompt",
+            objectives="Review exercises",
+        )
+    )
+    session.add(
+        Vocabulary(
+            english="practice",
+            translation="упражняться",
+            owner_id=101,
+            course_day=1,
+        )
+    )
     session.commit()
-    assert lesson_summary(session, 101)["remaining"] == len(TASKS)
+    task_rows = lesson_summary(session, 101)["tasks"]
+    available_keys = {row["key"] for row in task_rows if row["available"]}
+    assert len(available_keys) == len(TASKS) - 1  # No prior lesson exists for day-one review.
+    assert lesson_summary(session, 101)["remaining"] == len(available_keys)
     assert complete_task(session, 101, 1, "grammar")
     assert not finish_day(session, 101, 1)
-    for key, *_ in TASKS:
+    for key in available_keys:
         complete_task(session, 101, 1, key)
     assert finish_day(session, 101, 1)
     assert lesson_summary(session, 101)["day"] == 2
+
+
+def test_missing_course_has_no_completable_blocks(session):
+    assert lesson_summary(session, 101)["remaining"] == 0
+    assert all(not row["available"] for row in lesson_summary(session, 101)["tasks"])
+    assert not complete_task(session, 101, 1, "quiz")
+    assert not finish_day(session, 101, 1)
 
 
 def test_vocabulary_spaced_repetition_and_owner_filter(session):
@@ -68,7 +104,7 @@ def test_weekly_exam_records_answers_and_submits(session):
     exam = start_exam(session, 101, 1, duration_minutes=30)
     assert record_exam_answer(session, exam, 0, QUESTIONS[0]["answer"])
     result = submit_exam(session, exam)
-    assert result["total"] == 10 and result["score"] == 1
+    assert result["total"] == len(WEEKLY_QUESTIONS) and result["score"] == 1
     assert not record_exam_answer(session, exam, 0, 0)
 
 

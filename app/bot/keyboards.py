@@ -3,9 +3,12 @@ from aiogram.types import (
     InlineKeyboardMarkup,
     KeyboardButton,
     ReplyKeyboardMarkup,
+    WebAppInfo,
 )
 
-MAIN_MENU = ReplyKeyboardMarkup(
+from app.config import get_settings
+
+_LEGACY_MAIN_MENU = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📚 Сегодняшний урок")],
         [
@@ -32,6 +35,23 @@ MAIN_MENU = ReplyKeyboardMarkup(
     input_field_placeholder="Выберите действие",
 )
 
+_mini_app_url = get_settings().webhook_base_url
+if _mini_app_url and _mini_app_url.startswith("https://"):
+    MAIN_MENU = ReplyKeyboardMarkup(
+        keyboard=[
+            [
+                KeyboardButton(
+                    text="🚀 Открыть приложение",
+                    web_app=WebAppInfo(url=_mini_app_url.rstrip("/")),
+                )
+            ]
+        ],
+        resize_keyboard=True,
+        is_persistent=True,
+    )
+else:
+    MAIN_MENU = _LEGACY_MAIN_MENU
+
 BACK = InlineKeyboardMarkup(
     inline_keyboard=[[InlineKeyboardButton(text="⬅️ Главное меню", callback_data="menu")]]
 )
@@ -49,6 +69,14 @@ MENU_ACTIONS = {
     "🏆 Еженедельный экзамен": "exam",
     "⚙️ Настройки": "settings",
 }
+
+
+def mini_app_launch_keyboard(url: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🚀 Открыть приложение", web_app=WebAppInfo(url=url))]
+        ]
+    )
 
 
 def lesson_tasks_keyboard(tasks: list[dict]) -> InlineKeyboardMarkup:

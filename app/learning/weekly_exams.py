@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.database.models import Activity, ErrorLog, ExamSession, QuizAttempt
-from app.learning.daily_tests import QUESTIONS
+from app.learning.daily_tests import WEEKLY_QUESTIONS
 
 
 def start_exam(
@@ -15,7 +15,7 @@ def start_exam(
     exam = ExamSession(
         owner_id=owner_id,
         week_number=week,
-        questions_json=json.dumps(QUESTIONS, ensure_ascii=False),
+        questions_json=json.dumps(WEEKLY_QUESTIONS, ensure_ascii=False),
         answers_json="{}",
         started_at=now,
         deadline=now + timedelta(minutes=duration_minutes),
@@ -65,7 +65,7 @@ def submit_exam(session: Session, exam: ExamSession) -> dict:
     session.add(
         QuizAttempt(
             owner_id=exam.owner_id,
-            day_number=min(182, exam.week_number * 7),
+            day_number=min(210, exam.week_number * 7),
             score=score,
             total=total,
             answers_json=exam.answers_json,
@@ -74,7 +74,7 @@ def submit_exam(session: Session, exam: ExamSession) -> dict:
     session.add(
         Activity(
             owner_id=exam.owner_id,
-            day_number=min(182, exam.week_number * 7),
+            day_number=min(210, exam.week_number * 7),
             kind="weekly_exam",
             topic="Еженедельный экзамен",
             score=score / total * 100,

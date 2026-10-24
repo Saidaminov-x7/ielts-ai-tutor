@@ -10,12 +10,15 @@ class Settings(BaseSettings):
     telegram_bot_token: SecretStr | None = None
     owner_telegram_id: int | None = None
     openai_api_key: SecretStr | None = None
+    gemini_api_key: SecretStr | None = None
     webhook_base_url: str | None = None
     webhook_secret_token: SecretStr | None = None
     daily_job_secret: SecretStr | None = None
     daily_job_url: str | None = None
     port: int = Field(default=8080, ge=1, le=65535)
     openai_model: str = "gpt-4.1-mini"
+    gemini_model: str = "gemini-3.8-flash"
+    max_daily_gemini_requests: int = Field(default=10, ge=0, le=100)
     database_url: str = "sqlite:///./data/ielts.db"
     monthly_ai_budget_usd: float = Field(default=2.0, ge=0)
     ai_input_price_per_million: float = Field(default=0.4, ge=0)

@@ -14,10 +14,10 @@ from sqlalchemy.exc import IntegrityError
 from app.ai.writing_examiner import examine
 from app.bot.keyboards import (
     BACK,
-    EXAM_SUBMIT,
     MAIN_MENU,
     MENU_ACTIONS,
     lesson_tasks_keyboard,
+    mini_app_launch_keyboard,
     settings_keyboard,
 )
 from app.config import get_settings
@@ -41,11 +41,11 @@ from app.integrations.obsidian import (
     render_note,
 )
 from app.learning.adaptive import adapt_day
-from app.learning.daily_tests import answer_quiz, start_quiz, submit_quiz
+from app.learning.daily_tests import answer_quiz, submit_quiz
 from app.learning.lessons import complete_task, current_day, finish_day, lesson_summary
 from app.learning.reports import progress_report
 from app.learning.vocabulary import add_word, due_words, record_review, search_words
-from app.learning.weekly_exams import record_exam_answer, submit_exam, weekly_exam
+from app.learning.weekly_exams import record_exam_answer, submit_exam
 
 router = Router()
 
@@ -283,13 +283,19 @@ async def save_note_text(message: Message, state: FSMContext) -> None:
 
 @router.message(CommandStart())
 async def start(message: Message) -> None:
+    settings = get_settings()
+    app_url = settings.webhook_base_url.rstrip("/") if settings.webhook_base_url else ""
     await answer(
         message,
         "Привет! Я помогу заниматься по программе IELTS Academic. Выбирайте действия "
         "кнопками внизу чата. Обычный текст нужен для ответов, словаря и Writing.\n\n"
         "Результаты — учебная оценка, не официальный IELTS Band Score.\n"
         "GPT используется только по вашему выбору для проверки Writing.",
-        reply_markup=MAIN_MENU,
+        reply_markup=(
+            mini_app_launch_keyboard(app_url)
+            if app_url.startswith("https://")
+            else MAIN_MENU
+        ),
     )
 
 
@@ -337,7 +343,7 @@ async def lesson(callback: CallbackQuery) -> None:
     with SessionLocal() as session:
         data = lesson_summary(session, owner_id(callback.from_user))
         lines = [
-            f"📚 Неделя {data['week']}/26 · день {data['day']}/182",
+            f"📚 Неделя {data['week']}/30 · день {data['day']}/210",
             f"Тема: {escape(str(data['topic']))}",
             "Персональный план: "
             f"{escape(adapt_day(session, owner_id(callback.from_user), data['day']))}",
@@ -350,13 +356,17 @@ async def lesson(callback: CallbackQuery) -> None:
         if data["grammar"]:
             lines.append(f"Грамматика: {escape(str(data['grammar'])[:500])}")
         for item in data["tasks"]:
+            if not item["available"]:
+                continue
             lines.append(
                 f"{'✅' if item['done'] else '▫️'} {item['title']} ({item['minutes']} мин.)"
             )
         lines.append(f"Осталось заданий: {data['remaining']}")
         if callback.message:
             await callback.message.answer(
-                "\n".join(lines), reply_markup=lesson_tasks_keyboard(data["tasks"])
+                "\n".join(lines), reply_markup=lesson_tasks_keyboard(
+                    [item for item in data["tasks"] if item["available"]]
+                )
             )
 
 
@@ -376,7 +386,7 @@ async def complete_task_callback(callback: CallbackQuery) -> None:
         await callback.message.answer(
             "День завершён. Серия и прогресс обновлены."
             if finished
-            else "Блок отмечен. День засчитается после выполнения всех 8 блоков.",
+            else f"Блок отмечен. Осталось заданий: {summary['remaining']}.",
             reply_markup=lesson_tasks_keyboard(summary["tasks"]),
         )
 
@@ -570,28 +580,17 @@ async def review_answer_callback(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data == "quiz")
 async def quiz(callback: CallbackQuery) -> None:
-    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-
-    with SessionLocal() as session:
-        attempt = start_quiz(
-            session,
-            owner_id(callback.from_user),
-            current_day(session, owner_id(callback.from_user)),
-        )
-        qs = json.loads(attempt.questions_json)
-        attempt_id = attempt.id
-    if callback.message:
-        for idx, q in enumerate(qs):
-            keyboard = InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [InlineKeyboardButton(text=option, callback_data=f"q:{attempt_id}:{idx}:{n}")]
-                    for n, option in enumerate(q["options"])
-                ]
-            )
-            await callback.message.answer(f"{idx + 1}. {q['question']}", reply_markup=keyboard)
-        await callback.message.answer("После ответов на вопросы результат появится автоматически.")
+    settings = get_settings()
+    app_url = settings.webhook_base_url.rstrip("/") if settings.webhook_base_url else ""
     await callback.answer()
-
+    if callback.message:
+        if app_url.startswith("https://"):
+            await callback.message.answer(
+                "Тесты проходят внутри приложения.",
+                reply_markup=mini_app_launch_keyboard(app_url),
+            )
+        else:
+            await callback.message.answer("Приложение пока недоступно: не настроен HTTPS URL.")
 
 @router.callback_query(F.data.startswith("q:"))
 async def quiz_answer(callback: CallbackQuery) -> None:
@@ -686,37 +685,17 @@ async def errors(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data == "exam")
 async def exam(callback: CallbackQuery) -> None:
-    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-
+    settings = get_settings()
+    app_url = settings.webhook_base_url.rstrip("/") if settings.webhook_base_url else ""
     await callback.answer()
-    with SessionLocal() as session:
-        uid = owner_id(callback.from_user)
-        week = (current_day(session, uid) - 1) // 7 + 1
-        result = weekly_exam(session, uid, week)
-        exam_id = result.id
-        questions = __import__("json").loads(result.questions_json)
     if callback.message:
-        await callback.message.answer(
-            f"Начат учебный экзамен недели {week}. Время: 30 минут. "
-            "Это учебная проверка, не официальный IELTS."
-        )
-        for idx, question in enumerate(questions):
-            buttons = [
-                [
-                    InlineKeyboardButton(
-                        text=option, callback_data=f"exam:{exam_id}:{idx}:{option_idx}"
-                    )
-                ]
-                for option_idx, option in enumerate(question["options"])
-            ]
+        if app_url.startswith("https://"):
             await callback.message.answer(
-                f"{idx + 1}. {question['question']}",
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
+                "Экзамены проходят в приложении в одной сохранённой сессии.",
+                reply_markup=mini_app_launch_keyboard(app_url),
             )
-        await callback.message.answer(
-            "Когда ответите на вопросы, завершите экзамен кнопкой:", reply_markup=EXAM_SUBMIT
-        )
-
+        else:
+            await callback.message.answer("Приложение пока недоступно: не настроен HTTPS URL.")
 
 @router.callback_query(F.data == "exam:submit")
 async def submit_exam_callback(callback: CallbackQuery) -> None:

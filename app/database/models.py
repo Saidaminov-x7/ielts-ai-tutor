@@ -28,6 +28,32 @@ class CourseDay(Base):
     objectives: Mapped[str] = mapped_column(Text, default="")
 
 
+class CourseWeek(Base):
+    """Source roadmap content, explicitly authored at weekly granularity."""
+
+    __tablename__ = "course_weeks"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    week_number: Mapped[int] = mapped_column(Integer, unique=True, index=True)
+    month: Mapped[int] = mapped_column(Integer, default=1)
+    topic: Mapped[str] = mapped_column(String(300))
+    grammar: Mapped[str] = mapped_column(Text, default="")
+    listening: Mapped[str] = mapped_column(Text, default="")
+    reading_writing: Mapped[str] = mapped_column(Text, default="")
+    speaking_outcome: Mapped[str] = mapped_column(Text, default="")
+
+
+class CourseDayVocabulary(Base):
+    __tablename__ = "course_day_vocabulary"
+    __table_args__ = (
+        UniqueConstraint("owner_id", "day_number", "vocabulary_id", name="uq_course_day_vocab"),
+    )
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner_id: Mapped[int] = mapped_column(Integer, index=True)
+    day_number: Mapped[int] = mapped_column(Integer, index=True)
+    vocabulary_id: Mapped[int] = mapped_column(Integer, index=True)
+    reviewed: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
 class Vocabulary(Base):
     __tablename__ = "vocabulary"
     __table_args__ = (UniqueConstraint("english", "translation", name="uq_vocab_pair"),)
@@ -45,6 +71,32 @@ class Vocabulary(Base):
     mastery: Mapped[float] = mapped_column(Float, default=0.0)
     owner_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     course_day: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    source_key: Mapped[str | None] = mapped_column(
+        String(80), nullable=True, unique=True, index=True
+    )
+    course_week: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    pronunciation_hint: Mapped[str] = mapped_column(String(300), default="")
+    collocation: Mapped[str] = mapped_column(String(300), default="")
+    collocation_translation: Mapped[str] = mapped_column(String(500), default="")
+    collocation_transcription: Mapped[str] = mapped_column(String(300), default="")
+    collocation_pronunciation_hint: Mapped[str] = mapped_column(String(300), default="")
+
+
+class VocabularyProgress(Base):
+    """Per-learner spaced repetition state for shared course vocabulary."""
+
+    __tablename__ = "vocabulary_progress"
+    __table_args__ = (
+        UniqueConstraint("owner_id", "vocabulary_id", name="uq_vocab_progress_owner_word"),
+    )
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner_id: Mapped[int] = mapped_column(Integer, index=True)
+    vocabulary_id: Mapped[int] = mapped_column(Integer, index=True)
+    next_review: Mapped[date] = mapped_column(Date, default=date.today, index=True)
+    interval_days: Mapped[int] = mapped_column(Integer, default=1)
+    correct_count: Mapped[int] = mapped_column(Integer, default=0)
+    error_count: Mapped[int] = mapped_column(Integer, default=0)
+    mastery: Mapped[float] = mapped_column(Float, default=0.0)
 
 
 class ReviewSession(Base):
@@ -64,7 +116,7 @@ class Activity(Base):
     day_number: Mapped[int] = mapped_column(Integer, default=1)
     kind: Mapped[str] = mapped_column(String(40))
     topic: Mapped[str] = mapped_column(String(200), default="")
-    score: Mapped[float] = mapped_column(Float, default=0)
+    score: Mapped[float | None] = mapped_column(Float, default=0, nullable=True)
     completed_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC), index=True
     )
@@ -77,6 +129,7 @@ class WritingAttempt(Base):
     task_type: Mapped[str] = mapped_column(String(30))
     estimated_band: Mapped[float] = mapped_column(Float)
     feedback_json: Mapped[str] = mapped_column(Text)
+    submission_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
 
@@ -169,6 +222,9 @@ class AIUsage(Base):
     __tablename__ = "ai_usage"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     owner_id: Mapped[int] = mapped_column(Integer)
+    provider: Mapped[str] = mapped_column(
+        String(20), default="openai", server_default="openai", index=True
+    )
     month: Mapped[str] = mapped_column(String(7), index=True)
     request_date: Mapped[date] = mapped_column(Date, index=True)
     reserved_usd: Mapped[float] = mapped_column(Float, default=0)

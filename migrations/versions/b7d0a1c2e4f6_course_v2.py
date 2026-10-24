@@ -74,7 +74,8 @@ def upgrade() -> None:
     op.execute(
         sa.text(
             "INSERT INTO vocabulary_progress "
-            "(owner_id, vocabulary_id, next_review, interval_days, correct_count, error_count, mastery) "
+            "(owner_id, vocabulary_id, next_review, interval_days, "
+            "correct_count, error_count, mastery) "
             "SELECT owner_id, id, next_review, interval_days, correct_count, error_count, mastery "
             "FROM vocabulary WHERE owner_id IS NOT NULL"
         )
@@ -82,7 +83,8 @@ def upgrade() -> None:
     op.execute(
         sa.text(
             "INSERT INTO vocabulary_progress "
-            "(owner_id, vocabulary_id, next_review, interval_days, correct_count, error_count, mastery) "
+            "(owner_id, vocabulary_id, next_review, interval_days, "
+            "correct_count, error_count, mastery) "
             "SELECT -1, id, CURRENT_DATE, 0, 0, 0, 0 FROM vocabulary WHERE owner_id IS NULL"
         )
     )

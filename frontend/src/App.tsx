@@ -221,13 +221,15 @@ export default function App() {
 
       <div className="main-column">
         <header className="topbar">
-          <div className="mobile-brand"><span className="brand-mark">i<span>.</span></span><span>STUDY SPACE</span></div>
-          <div className="breadcrumbs"><span>My learning</span><span aria-hidden="true">/</span><strong>{title}</strong></div>
-          <div className="topbar-right"><span className="today-date">{new Intl.DateTimeFormat('en', { weekday: 'short', month: 'short', day: 'numeric' }).format(new Date())}</span><button className="avatar" type="button" aria-label="Open settings" onClick={() => openTab('settings')}>I</button></div>
+          <div className="topbar-inner">
+            <div className="mobile-brand"><span className="brand-mark">i<span>.</span></span><span>IELTS</span></div>
+            <div className="breadcrumbs" aria-live="polite"><strong>{title}</strong></div>
+            <div className="topbar-right"><span className="today-date">{new Intl.DateTimeFormat('en', { weekday: 'short', month: 'short', day: 'numeric' }).format(new Date())}</span><button className="avatar" type="button" aria-label="Open settings" onClick={() => openTab('settings')}>I</button></div>
+          </div>
         </header>
 
         <main id="main-content" className="content-wrap" tabIndex={-1}>
-          {bootstrapError && <ErrorNotice message={bootstrapError} retry={hasTelegramInitData ? () => void loadBootstrap() : undefined} />}
+          {bootstrapError && !bootstrap && <ErrorNotice message={bootstrapError} retry={hasTelegramInitData ? () => void loadBootstrap() : undefined} />}
           {hasTelegramInitData && bootstrapLoading && !bootstrap && <LoadingBlock />}
           {bootstrap && visitedTabs.has('home') && <section hidden={tab !== 'home'}><Dashboard bootstrap={bootstrap} loading={bootstrapLoading} onNavigate={openTab} /></section>}
           {bootstrap && visitedTabs.has('lesson') && <section hidden={tab !== 'lesson'}><LessonScreen lesson={bootstrap.lesson} loading={bootstrapLoading} error={bootstrapError} retry={() => void loadBootstrap()} refresh={() => loadBootstrap().then(() => undefined)} onNavigate={openTab} /></section>}
@@ -260,14 +262,14 @@ function Dashboard({ bootstrap, loading, onNavigate }: { bootstrap: Bootstrap | 
   const lesson = bootstrap?.lesson
   return (
     <div className="page-stack">
-      <section className="welcome-row"><div><p className="eyebrow">YOUR STUDY JOURNAL</p><h1>Make today<br className="mobile-only" /> count<span className="period">.</span></h1><p className="welcome-copy">A focused session is enough to keep your English moving forward.</p></div><div className="today-stamp"><span>DAY</span><strong>{summary?.day ? String(summary.day).padStart(2, '0') : '—'}</strong><small>of your plan</small></div></section>
+      <section className="welcome-row"><div><p className="eyebrow">{summary ? `WEEK ${summary.week} · DAY ${summary.day}` : 'YOUR STUDY PLAN'}</p><h1>Today</h1><p className="welcome-copy">Your lesson and next study steps.</p></div><div className="today-stamp" aria-label={`Day ${summary?.day ?? '—'} of your plan`}><span>DAY</span><strong>{summary?.day ? String(summary.day).padStart(2, '0') : '—'}</strong><small>of 210</small></div></section>
       {loading && !bootstrap ? <LoadingBlock /> : null}
 
       <section className="today-card" aria-labelledby="today-title">
         <div className="today-card-top"><Tag tone={lesson?.course_imported ? 'green' : 'amber'}>{lesson?.course_imported ? 'TODAY’S LESSON' : 'COURSE CONTENT'}</Tag><span className="week-label">{summary?.week ? `WEEK ${String(summary.week).padStart(2, '0')}` : '—'}</span></div>
-        <h2 id="today-title">{lesson?.course_imported && lesson.topic ? lesson.topic : 'Your study plan is ready'}</h2>
-        <p>{lesson?.course_imported ? 'Pick up where you left off, one clear step at a time.' : 'Lesson material appears here after your course workbook is imported. No sample lesson is shown.'}</p>
-        <div className="today-card-bottom"><div className="tiny-meta"><span><Icon name="clock" size={15} /> {lesson?.tasks?.length ? `${lesson.tasks.reduce((sum, task) => sum + task.minutes, 0)} min planned` : 'Ready when you are'}</span>{summary && <span><Icon name="check" size={15} /> {summary.completed_days} days completed</span>}</div><button className="button button-dark" type="button" onClick={() => onNavigate('lesson')}>Open lesson <Icon name="arrow" size={16} /></button></div>
+        <h2 id="today-title">{lesson?.course_imported && lesson.topic ? lesson.topic : 'Course materials are not loaded'}</h2>
+        <p>{lesson?.course_imported ? 'Continue with the next available step in your course.' : 'The course workbook has not been imported yet, so today’s lesson and vocabulary are unavailable.'}</p>
+        <div className="today-card-bottom"><div className="tiny-meta">{lesson?.tasks?.length ? <span><Icon name="clock" size={15} /> {lesson.tasks.reduce((sum, task) => sum + task.minutes, 0)} min</span> : null}{summary && <span><Icon name="check" size={15} /> {summary.completed_days} days completed</span>}</div><button className="button button-dark" type="button" onClick={() => onNavigate('lesson')}>{lesson?.course_imported ? 'Continue lesson' : 'View lesson plan'} <Icon name="arrow" size={16} /></button></div>
       </section>
 
       <div className="section-title-row"><div><p className="eyebrow">YOUR ROUTINE</p><h2>Keep the rhythm</h2></div><span className="section-aside">Nothing extra. Just the next step.</span></div>
@@ -278,7 +280,6 @@ function Dashboard({ bootstrap, loading, onNavigate }: { bootstrap: Bootstrap | 
         <ActivityCard icon="book" number="↗" title="Writing studio" detail="Review a draft with AI" onClick={() => onNavigate('writing')} />
       </section>
 
-      <section className="note-strip"><div className="note-icon"><Icon name="sun" size={18} /></div><p><strong>Small sessions add up.</strong> Your progress reflects saved activity only. No activity yet? Start with a quick practice when it’s available.</p><button className="icon-button" type="button" aria-label="Open progress" onClick={() => onNavigate('insights')}><Icon name="arrow" size={18} /></button></section>
     </div>
   )
 }

@@ -1,3 +1,5 @@
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
 from aiogram.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -39,12 +41,7 @@ _mini_app_url = get_settings().webhook_base_url
 if _mini_app_url and _mini_app_url.startswith("https://"):
     MAIN_MENU = ReplyKeyboardMarkup(
         keyboard=[
-            [
-                KeyboardButton(
-                    text="🚀 Открыть приложение",
-                    web_app=WebAppInfo(url=_mini_app_url.rstrip("/")),
-                )
-            ]
+            [KeyboardButton(text="🚀 Открыть приложение")]
         ],
         resize_keyboard=True,
         is_persistent=True,
@@ -57,6 +54,7 @@ BACK = InlineKeyboardMarkup(
 )
 
 MENU_ACTIONS = {
+    "🚀 Открыть приложение": "app",
     "🏠 Главное меню": "menu",
     "📚 Сегодняшний урок": "lesson",
     "🧠 Изучить слова": "words",
@@ -71,10 +69,15 @@ MENU_ACTIONS = {
 }
 
 
-def mini_app_launch_keyboard(url: str) -> InlineKeyboardMarkup:
+def mini_app_launch_keyboard(url: str, tab: str | None = None) -> InlineKeyboardMarkup:
+    parts = urlsplit(url)
+    query = dict(parse_qsl(parts.query, keep_blank_values=True))
+    if tab in {"home", "lesson", "practice", "exam", "words", "insights", "settings", "writing"}:
+        query["tab"] = tab
+    app_url = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🚀 Открыть приложение", web_app=WebAppInfo(url=url))]
+            [InlineKeyboardButton(text="🚀 Открыть приложение", web_app=WebAppInfo(url=app_url))]
         ]
     )
 

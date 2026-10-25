@@ -99,6 +99,30 @@ class VocabularyProgress(Base):
     mastery: Mapped[float] = mapped_column(Float, default=0.0)
 
 
+class VocabularyExampleSet(Base):
+    """Validated, shared cache of Gemini examples for a source vocabulary item."""
+
+    __tablename__ = "vocabulary_example_sets"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    vocabulary_id: Mapped[int] = mapped_column(Integer, unique=True, index=True)
+    examples_json: Mapped[str] = mapped_column(Text, default="[]")
+    pending_since: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+
+class GeminiDailyQuota(Base):
+    """Atomic daily request counter shared by all Gemini learning features."""
+
+    __tablename__ = "gemini_daily_quotas"
+    __table_args__ = (
+        UniqueConstraint("owner_id", "request_date", name="uq_gemini_daily_quota_owner_date"),
+    )
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner_id: Mapped[int] = mapped_column(Integer, index=True)
+    request_date: Mapped[date] = mapped_column(Date, index=True)
+    request_count: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class ReviewSession(Base):
     __tablename__ = "review_sessions"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -140,6 +164,7 @@ class DailyDelivery(Base):
     owner_id: Mapped[int] = mapped_column(Integer, index=True)
     day: Mapped[date] = mapped_column(Date, index=True)
     status: Mapped[str] = mapped_column(String(20), default="pending")
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
@@ -244,6 +269,22 @@ class UserSettings(Base):
     streak: Mapped[int] = mapped_column(Integer, default=0)
     max_streak: Mapped[int] = mapped_column(Integer, default=0)
     completed_days: Mapped[int] = mapped_column(Integer, default=0)
+    course_started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    course_schedule_day: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class CourseResetArchive(Base):
+    """Owner-scoped historical snapshot of state cleared by a course restart."""
+
+    __tablename__ = "course_reset_archives"
+    __table_args__ = (
+        UniqueConstraint("owner_id", "request_key", name="uq_course_reset_owner_request"),
+    )
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner_id: Mapped[int] = mapped_column(Integer, index=True)
+    request_key: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    reset_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    payload_json: Mapped[str] = mapped_column(Text)
 
 
 class ObsidianSave(Base):

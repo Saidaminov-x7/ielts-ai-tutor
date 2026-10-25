@@ -1,7 +1,7 @@
 import hmac
 import logging
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from html import escape
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -13,14 +13,16 @@ from aiogram.exceptions import TelegramAPIError
 from aiogram.types import MenuButtonWebApp, WebAppInfo
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler
 from aiohttp import web
-from sqlalchemy import select
+from sqlalchemy import or_, select, update
+from sqlalchemy.exc import IntegrityError
 
 from app.api.mini_app import json_errors, register_routes
 from app.bot.handlers import router
 from app.bot.keyboards import MAIN_MENU
 from app.config import get_settings
-from app.database.models import CourseDay, DailyDelivery, UserSettings, Vocabulary
+from app.database.models import CourseDay, CourseWeek, DailyDelivery, UserSettings, Vocabulary
 from app.database.session import SessionLocal, init_db
+from app.learning.course_sources import new_cards_for_day
 from app.scheduler.n8n_events import EVENT_TYPES, event_message, finish_event, reserve_event
 from app.security.authentication import OwnerOnlyMiddleware
 from app.security.mini_app_auth import mini_app_auth_middleware
@@ -75,6 +77,57 @@ async def health(_: web.Request) -> web.Response:
     return web.json_response({"status": "ok"})
 
 
+def _claim_daily_delivery(
+    session, owner_id: int, day: date, now: datetime
+) -> tuple[bool, int]:
+    """Claim this day's Telegram delivery once, recovering abandoned sends after five minutes."""
+    lease_expired_before = now - timedelta(minutes=5)
+    delivery = session.scalar(
+        select(DailyDelivery).where(
+            DailyDelivery.owner_id == owner_id,
+            DailyDelivery.day == day,
+        )
+    )
+    if delivery is None:
+        delivery = DailyDelivery(
+            owner_id=owner_id,
+            day=day,
+            status="sending",
+            claimed_at=now,
+        )
+        session.add(delivery)
+        try:
+            session.commit()
+            return True, delivery.id
+        except IntegrityError:
+            session.rollback()
+            delivery = session.scalar(
+                select(DailyDelivery).where(
+                    DailyDelivery.owner_id == owner_id,
+                    DailyDelivery.day == day,
+                )
+            )
+            if delivery is None:
+                raise
+
+    claim = session.execute(
+        update(DailyDelivery)
+        .where(
+            DailyDelivery.id == delivery.id,
+            DailyDelivery.status != "sent",
+            or_(
+                DailyDelivery.status != "sending",
+                DailyDelivery.claimed_at.is_(None),
+                DailyDelivery.claimed_at <= lease_expired_before,
+            ),
+        )
+        .values(status="sending", claimed_at=now)
+    )
+    acquired = claim.rowcount == 1  # type: ignore[attr-defined]
+    session.commit()
+    return acquired, delivery.id
+
+
 async def daily_delivery(request: web.Request) -> web.Response:
     settings = get_settings()
     provided = request.headers.get("X-Daily-Job-Secret", "")
@@ -90,29 +143,46 @@ async def daily_delivery(request: web.Request) -> web.Response:
         raise web.HTTPServiceUnavailable(text="Owner is not configured")
     local_today = datetime.now(ZoneInfo(settings.timezone)).date()
     with SessionLocal() as session:
-        prior = session.scalar(
-            select(DailyDelivery).where(
-                DailyDelivery.owner_id == owner_id,
-                DailyDelivery.day == local_today,
-            )
+        claimed, delivery_id = _claim_daily_delivery(
+            session, owner_id, local_today, datetime.now(UTC).replace(tzinfo=None)
         )
-        if prior and prior.status == "sent":
-            return web.json_response({"status": "already_sent"})
-        delivery = prior or DailyDelivery(owner_id=owner_id, day=local_today, status="pending")
-        session.add(delivery)
-        session.commit()
+        if not claimed:
+            prior = session.get(DailyDelivery, delivery_id)
+            status = "already_sent" if prior and prior.status == "sent" else "in_progress"
+            return web.json_response({"status": status})
+        delivery = session.get(DailyDelivery, delivery_id)
+        if delivery is None:
+            raise web.HTTPInternalServerError(text="Daily delivery claim was lost")
         user_settings = session.get(UserSettings, owner_id)
-        course_day = user_settings.current_day if user_settings else 1
+        original_cursor = user_settings.course_schedule_day if user_settings else None
+        original_course_started_at = user_settings.course_started_at if user_settings else None
+        scheduled_day = (
+            user_settings.course_schedule_day or user_settings.current_day
+            if user_settings
+            else 1
+        )
+        if scheduled_day > 210:
+            delivery.status = "sent"
+            delivery.claimed_at = None
+            delivery.delivered_at = datetime.now(UTC)
+            session.commit()
+            return web.json_response({"status": "course_complete"})
+        course_day = max(1, scheduled_day)
+        week_number = min(30, max(1, (course_day - 1) // 7 + 1))
         lesson = session.scalar(select(CourseDay).where(CourseDay.day_number == course_day))
+        week = session.scalar(select(CourseWeek).where(CourseWeek.week_number == week_number))
+        topic = lesson.topic if lesson else week.topic if week else None
+        grammar = lesson.grammar if lesson else week.grammar if week else ""
+        sequences = () if course_day % 7 == 0 else new_cards_for_day(course_day)
         vocabulary = list(
             session.scalars(
                 select(Vocabulary)
                 .where(
-                    Vocabulary.course_day == course_day,
+                    Vocabulary.course_week == week_number,
+                    Vocabulary.source_key.in_([f"pdf:{number:03d}" for number in sequences]),
                     (Vocabulary.owner_id == owner_id) | Vocabulary.owner_id.is_(None),
                 )
-                .order_by(Vocabulary.english)
-                .limit(10)
+                .order_by(Vocabulary.source_key)
             )
         )
         if not vocabulary:
@@ -127,11 +197,30 @@ async def daily_delivery(request: web.Request) -> web.Response:
                     .limit(10)
                 )
             )
-        day_label = f"День {course_day}/210 · неделя {min(30, (course_day - 1) // 7 + 1)}/30"
-        title = escape(lesson.topic) if lesson else "материалы программы ещё не импортированы"
-        lines = ["📚 <b>План на сегодня</b>", day_label, f"Тема: {title}"]
-        if lesson and lesson.grammar:
-            lines.append(f"Грамматика: {escape(lesson.grammar[:700])}")
+        day_label = f"День {course_day}/210 · неделя {week_number}/30"
+        title = escape(topic) if topic else "материалы программы ещё не импортированы"
+        day_in_week = (course_day - 1) % 7 + 1
+        sourced_focus = (
+            [week.grammar, week.listening, week.reading_writing, week.speaking_outcome]
+            if week
+            else []
+        )
+        focus = (
+            sourced_focus[day_in_week - 1]
+            if day_in_week <= 4 and sourced_focus
+            else "повторение слов недели"
+            if day_in_week == 7
+            else "лексика недели"
+        )
+        focus = escape(focus) if focus else "материалы дня ещё не импортированы"
+        lines = [
+            "📚 <b>План на сегодня</b>",
+            day_label,
+            f"Тема недели: {title}",
+            f"Фокус дня: {focus}",
+        ]
+        if grammar and not (week and day_in_week == 1):
+            lines.append(f"Грамматика: {escape(grammar[:700])}")
         if vocabulary:
             lines.append("\n🧠 <b>Слова дня</b>")
             lines.extend(
@@ -140,15 +229,41 @@ async def daily_delivery(request: web.Request) -> web.Response:
             )
         else:
             lines.append("\nСлова появятся после импорта вашей программы курса.")
-        lines.append("\nОткройте меню кнопок внизу чата, чтобы начать занятие.")
+        lines.append("\nОткройте приложение кнопкой внизу чата, чтобы начать занятие.")
         try:
             await bot.send_message(owner_id, "\n".join(lines), reply_markup=MAIN_MENU)
         except TelegramAPIError:
             logger.exception("Daily Telegram delivery failed for owner")
             session.rollback()
+            failed_delivery = session.get(DailyDelivery, delivery_id)
+            if failed_delivery is not None:
+                failed_delivery.status = "failed"
+                failed_delivery.claimed_at = None
+                session.commit()
             return web.json_response({"status": "delivery_failed"}, status=502)
         delivery.status = "sent"
+        delivery.claimed_at = None
         delivery.delivered_at = datetime.now(UTC)
+        if user_settings is not None and week is not None:
+            cursor_filter = (
+                UserSettings.course_schedule_day.is_(None)
+                if original_cursor is None
+                else UserSettings.course_schedule_day == original_cursor
+            )
+            started_at_filter = (
+                UserSettings.course_started_at.is_(None)
+                if original_course_started_at is None
+                else UserSettings.course_started_at == original_course_started_at
+            )
+            session.execute(
+                update(UserSettings)
+                .where(
+                    UserSettings.owner_id == owner_id,
+                    cursor_filter,
+                    started_at_filter,
+                )
+                .values(course_schedule_day=min(211, course_day + 1))
+            )
         session.commit()
     return web.json_response({"status": "sent", "day": course_day, "words": len(vocabulary)})
 

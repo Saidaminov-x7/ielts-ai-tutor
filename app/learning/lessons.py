@@ -11,6 +11,7 @@ from app.database.models import (
     TaskProgress,
     UserSettings,
     Vocabulary,
+    VocabularyProgress,
 )
 from app.learning.vocabulary import (
     due_words,
@@ -43,6 +44,31 @@ def _task_availability(
 ) -> dict[str, bool]:
     if course is None:
         return {key: False for key, _title, _minutes in TASKS}
+
+    if isinstance(course, CourseWeek):
+        from app.learning.course_sources import new_cards_for_day
+
+        weekly_tasks = {key: False for key, _title, _minutes in TASKS}
+        if day % 7:
+            sequences = new_cards_for_day(day)
+            if sequences:
+                found = set(
+                    session.scalars(
+                        select(Vocabulary.source_key).where(
+                            Vocabulary.source_key.in_(
+                                [f"pdf:{number:03d}" for number in sequences]
+                            ),
+                            Vocabulary.owner_id.is_(None),
+                        )
+                    )
+                )
+                expected = {f"pdf:{number:03d}" for number in sequences}
+                weekly_tasks["vocabulary"] = expected.issubset(found)
+        else:
+            # Sunday is a planned review/rest day. It remains completable even
+            # when SRS correctly has no cards due yet.
+            weekly_tasks["review"] = True
+        return weekly_tasks
 
     previous_course = (
         session.scalar(select(CourseDay).where(CourseDay.day_number == day - 1))
@@ -172,35 +198,36 @@ def lesson_summary(session: Session, owner_id: int, day_number: int | None = Non
         due_count = len(due_words(session, limit=50, owner_id=owner_id))
         if sequences:
             cards = words_for_day(session, owner_id, week_number, sequences, day)
-            studied = (
-                session.scalar(
-                    select(Activity.id).where(
-                        Activity.owner_id == owner_id,
-                        Activity.day_number == day,
-                        Activity.kind == "vocabulary_study",
-                    )
-                )
-                is not None
+            expected_keys = {f"pdf:{number:03d}" for number in sequences}
+            expected_ids = (
+                {card.id for card in cards} if len(cards) == len(expected_keys) else set()
             )
-            completed_assignments = list(
+            completed_ids = set(
                 session.scalars(
-                    select(CourseDayVocabulary.reviewed).where(
+                    select(CourseDayVocabulary.vocabulary_id).where(
                         CourseDayVocabulary.owner_id == owner_id,
                         CourseDayVocabulary.day_number == day,
+                        CourseDayVocabulary.reviewed.is_(True),
                     )
                 )
             )
-            done = studied or (
-                len(completed_assignments) >= len(sequences)
-                and all(completed_assignments)
-            )
+            recalled_ids = set(
+                session.scalars(
+                    select(VocabularyProgress.vocabulary_id).where(
+                        VocabularyProgress.owner_id == owner_id,
+                        VocabularyProgress.vocabulary_id.in_(expected_ids),
+                        (VocabularyProgress.correct_count + VocabularyProgress.error_count) > 0,
+                    )
+                )
+            ) if expected_ids else set()
+            done = bool(expected_ids) and expected_ids.issubset(completed_ids & recalled_ids)
             tasks = [
                 {
                     "key": "vocabulary",
                     "title": "Vocabulary and collocations",
                     "minutes": 35,
                     "done": done,
-                    "available": bool(cards) or done,
+                    "available": len(cards) == len(expected_keys) or done,
                     "new_cards": len(cards),
                 }
             ]
@@ -213,7 +240,7 @@ def lesson_summary(session: Session, owner_id: int, day_number: int | None = Non
                     )
                 )
             )
-            due_today = words_due_for_course_day(session, owner_id, week_number, day)
+            words_due_for_course_day(session, owner_id, week_number, day)
             assignments = list(
                 session.scalars(
                     select(CourseDayVocabulary).where(
@@ -222,15 +249,19 @@ def lesson_summary(session: Session, owner_id: int, day_number: int | None = Non
                     )
                 )
             )
-            reviewed_today = bool(assignments) and all(item.reviewed for item in assignments)
+            reviewed_today = (
+                all(item.reviewed for item in assignments)
+                if assignments
+                else progress.get("review", False)
+            )
             tasks = [
                 {
                     "key": "review",
                     "title": "Review due vocabulary",
                     "minutes": 35,
                     "done": reviewed_today,
-                    "available": bool(due_today) or reviewed_today,
-                    "due_cards": len(due_today) + len(assignments),
+                    "available": True,
+                    "due_cards": len(assignments),
                 }
             ]
         return {
@@ -291,20 +322,69 @@ def complete_task(session: Session, owner_id: int, day_number: int, task_key: st
     if task_key not in {task[0] for task in TASKS}:
         return False
     course = session.scalar(select(CourseDay).where(CourseDay.day_number == day_number))
-    if course is None:
-        # Weekly content needs its own progress contract; legacy day-task rows
-        # cannot truthfully represent completion of a weekly source prompt.
-        return False
     week = session.scalar(
         select(CourseWeek).where(CourseWeek.week_number == week_for_day(day_number))
     )
     availability = _task_availability(session, owner_id, day_number, course or week)
     if not availability.get(task_key, False):
         return False
-    if course is None and task_key not in {"vocabulary"}:
-        # The roadmap supplies prompts at weekly grain, not executable daily
-        # lesson payloads. Do not let a checkbox claim unprovided material ran.
-        return False
+    if course is None and week is not None:
+        if day_number % 7:
+            if task_key != "vocabulary":
+                return False
+            from app.learning.course_sources import new_cards_for_day
+
+            expected = {
+                f"pdf:{number:03d}" for number in new_cards_for_day(day_number)
+            }
+            assignments = list(
+                session.scalars(
+                    select(CourseDayVocabulary)
+                    .join(Vocabulary, Vocabulary.id == CourseDayVocabulary.vocabulary_id)
+                    .where(
+                        CourseDayVocabulary.owner_id == owner_id,
+                        CourseDayVocabulary.day_number == day_number,
+                        Vocabulary.source_key.is_not(None),
+                    )
+                )
+            )
+            assigned_ids = {
+                int(row.vocabulary_id) for row in assignments
+            }
+            source_rows = list(
+                session.scalars(
+                    select(Vocabulary).where(Vocabulary.source_key.in_(expected))
+                )
+            )
+            source_ids = {int(row.id) for row in source_rows}
+            imported_keys = {str(row.source_key) for row in source_rows}
+            recalled_ids = set(
+                session.scalars(
+                    select(VocabularyProgress.vocabulary_id).where(
+                        VocabularyProgress.owner_id == owner_id,
+                        VocabularyProgress.vocabulary_id.in_(source_ids),
+                        (VocabularyProgress.correct_count + VocabularyProgress.error_count) > 0,
+                    )
+                )
+            ) if source_ids else set()
+            if (
+                imported_keys != expected
+                or not source_ids
+                or not source_ids.issubset(assigned_ids)
+                or not source_ids.issubset(recalled_ids)
+                or any(not row.reviewed for row in assignments)
+            ):
+                return False
+        elif task_key != "review":
+            return False
+        elif session.scalar(
+            select(CourseDayVocabulary.id).where(
+                CourseDayVocabulary.owner_id == owner_id,
+                CourseDayVocabulary.day_number == day_number,
+                CourseDayVocabulary.reviewed.is_(False),
+            )
+        ) is not None:
+            return False
     progress = session.scalar(
         select(TaskProgress).where(
             TaskProgress.owner_id == owner_id,
@@ -324,13 +404,17 @@ def complete_task(session: Session, owner_id: int, day_number: int, task_key: st
 def finish_day(session: Session, owner_id: int, day_number: int) -> bool:
     if not 1 <= day_number <= DAY_COUNT:
         return False
-    existing_completion = session.scalar(
-        select(Activity).where(
-            Activity.owner_id == owner_id,
-            Activity.day_number == day_number,
-            Activity.kind == "lesson",
-        )
+    settings = session.get(UserSettings, owner_id)
+    completion_query = select(Activity).where(
+        Activity.owner_id == owner_id,
+        Activity.day_number == day_number,
+        Activity.kind == "lesson",
     )
+    if settings and settings.course_started_at:
+        completion_query = completion_query.where(
+            Activity.completed_at >= settings.course_started_at
+        )
+    existing_completion = session.scalar(completion_query)
     if existing_completion:
         return False
     course = session.scalar(select(CourseDay).where(CourseDay.day_number == day_number))
@@ -355,7 +439,6 @@ def finish_day(session: Session, owner_id: int, day_number: int) -> bool:
         return False
     from datetime import date, timedelta
 
-    settings = session.get(UserSettings, owner_id)
     if settings is None:
         settings = UserSettings(
             owner_id=owner_id, current_day=1, streak=0, max_streak=0, completed_days=0

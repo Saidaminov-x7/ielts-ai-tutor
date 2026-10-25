@@ -6,7 +6,13 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.bot import handlers
-from app.database.models import Activity, ReviewSession, UserSettings, Vocabulary
+from app.database.models import (
+    Activity,
+    ReviewSession,
+    UserSettings,
+    Vocabulary,
+    VocabularyProgress,
+)
 
 
 @pytest.mark.asyncio
@@ -45,7 +51,10 @@ async def test_final_review_callback_commits_session_activity_and_streak(
     saved_settings = session.get(UserSettings, 101)
     activities = list(session.query(Activity).filter_by(owner_id=101, kind="review"))
     assert saved_review is not None and saved_review.completed and saved_review.cursor == 1
-    assert saved_word is not None and saved_word.correct_count == 1
+    progress = session.query(VocabularyProgress).filter_by(
+        owner_id=101, vocabulary_id=word_id
+    ).one()
+    assert saved_word is not None and progress.correct_count == 1
     assert saved_settings is not None and saved_settings.streak == 1
     assert len(activities) == 1 and activities[0].score == 100
     callback.answer.assert_awaited_once()
@@ -65,6 +74,6 @@ async def test_start_shows_persistent_menu_and_limits_ai_to_writing():
     message = SimpleNamespace(answer=AsyncMock())
     await handlers.start(message)
     text = message.answer.await_args.args[0]
-    assert "кнопками" in text
+    assert "кнопкой «Открыть приложение»" in text
     assert "только по вашему выбору" in text
     assert message.answer.await_args.kwargs["reply_markup"] is MAIN_MENU

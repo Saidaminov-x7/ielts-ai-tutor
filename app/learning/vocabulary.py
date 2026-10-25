@@ -86,9 +86,9 @@ def _progress(session: Session, owner_id: int, word: Vocabulary) -> VocabularyPr
             vocabulary_id=word.id,
             next_review=word.next_review if interval else date.today(),
             interval_days=interval,
-            correct_count=word.correct_count,
-            error_count=word.error_count,
-            mastery=word.mastery,
+            correct_count=0 if is_catalogue_card else word.correct_count,
+            error_count=0 if is_catalogue_card else word.error_count,
+            mastery=0 if is_catalogue_card else word.mastery,
         )
         session.add(state)
         session.flush()
@@ -106,8 +106,11 @@ def due_words(session: Session, limit: int = 20, owner_id: int | None = None) ->
         )
         query = query.where(
             or_(
-                (Vocabulary.source_key.is_not(None) & VocabularyProgress.id.is_(None)),
-                (VocabularyProgress.id.is_(None) & (Vocabulary.next_review <= date.today())),
+                (
+                    Vocabulary.source_key.is_(None)
+                    & VocabularyProgress.id.is_(None)
+                    & (Vocabulary.next_review <= date.today())
+                ),
                 (
                     VocabularyProgress.id.is_not(None)
                     & (VocabularyProgress.next_review <= date.today())
@@ -153,7 +156,8 @@ def words_for_day(
                 vocabulary_id=row.id,
             )
             session.add(assignment)
-        assignment.reviewed = True
+        # Assigning a card to today's lesson is not evidence that the learner
+        # studied or recalled it. The review flow marks it after an answer.
     for row in rows:
         _progress(session, owner_id, row)
     session.commit()
@@ -201,7 +205,7 @@ def words_due_for_course_day(
     due = [
         word
         for word in due_words(session, limit=limit, owner_id=owner_id)
-        if word.course_week == week
+        if word.course_week is not None and word.course_week <= week
     ]
     selected = [word for word in due if word.id not in assigned]
     for word in selected:

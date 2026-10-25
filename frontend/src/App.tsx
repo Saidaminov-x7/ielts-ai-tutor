@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { api } from './api'
+import { ApiError } from './types'
 import type {
   ActivityItem,
   Bootstrap,
@@ -112,31 +113,60 @@ function Tag({ children, tone = 'quiet' }: { children: ReactNode; tone?: 'quiet'
 
 export default function App() {
   useTelegramTheme()
-  const [tab, setTab] = useState<TabId>('home')
-  const [visitedTabs, setVisitedTabs] = useState<Set<TabId>>(() => new Set(['home']))
+  const hasTelegramInitData = Boolean(window.Telegram?.WebApp?.initData)
+  const initialTab = (() => {
+    const requested = new URLSearchParams(window.location.search).get('tab')
+    return navItems.some((item) => item.id === requested) || requested === 'writing' || requested === 'exam'
+      ? requested as TabId
+      : 'home'
+  })()
+  const [tab, setTab] = useState<TabId>(initialTab)
+  const [visitedTabs, setVisitedTabs] = useState<Set<TabId>>(() => new Set([initialTab]))
   const [bootstrap, setBootstrap] = useState<Bootstrap | null>(null)
   const [bootstrapError, setBootstrapError] = useState('')
+  const [authError, setAuthError] = useState('')
   const [bootstrapLoading, setBootstrapLoading] = useState(true)
   const [activeQuiz, setActiveQuiz] = useState<QuizSession | null>(null)
   const [quizResult, setQuizResult] = useState<QuizResult | null>(null)
   const [activeExam, setActiveExam] = useState<ExamSession | null>(null)
   const [examResult, setExamResult] = useState<ExamResult | null>(null)
+  const ownerId = bootstrap?.user.telegram_id ?? null
 
-  const loadBootstrap = useCallback(async () => {
+  useEffect(() => {
+    const handleAuthError = (event: Event) => {
+      const message = (event as CustomEvent<string>).detail
+      setAuthError(message || 'Telegram could not verify this launch. Close and reopen the Mini App from your tutor.')
+      setBootstrap(null)
+      setBootstrapError('')
+    }
+    window.addEventListener('ielts-auth-error', handleAuthError)
+    return () => window.removeEventListener('ielts-auth-error', handleAuthError)
+  }, [])
+
+  const loadBootstrap = useCallback(async (): Promise<boolean> => {
     setBootstrapLoading(true)
     setBootstrapError('')
     try {
       const value = await api.bootstrap()
       setBootstrap(value)
+      return true
     } catch (error) {
-      setBootstrapError(error instanceof Error ? error.message : 'Could not load your study space.')
+      if (error instanceof ApiError && error.code === 'auth') {
+        setBootstrap(null)
+        setBootstrapError('')
+        setAuthError(error.message)
+      } else {
+        setBootstrapError(error instanceof Error ? error.message : 'Could not load your study space.')
+      }
+      return false
     } finally {
       setBootstrapLoading(false)
     }
   }, [])
 
-  useEffect(() => { void loadBootstrap() }, [loadBootstrap])
+  useEffect(() => { if (hasTelegramInitData) void loadBootstrap() }, [hasTelegramInitData, loadBootstrap])
   useEffect(() => {
+    if (!hasTelegramInitData || ownerId === null) return
     let storedId = ''
     try { storedId = sessionStorage.getItem('ielts-active-quiz-id') ?? '' } catch { return }
     const id = Number(storedId)
@@ -147,8 +177,9 @@ export default function App() {
       setVisitedTabs((current) => new Set(current).add('practice'))
     }).catch(() => {
     })
-  }, [])
+  }, [hasTelegramInitData, ownerId])
   useEffect(() => {
+    if (!hasTelegramInitData || ownerId === null) return
     let storedId = ''
     try { storedId = sessionStorage.getItem('ielts-active-exam-id') ?? '' } catch { return }
     const id = Number(storedId)
@@ -160,13 +191,21 @@ export default function App() {
     }).catch(() => {
       try { sessionStorage.removeItem('ielts-active-exam-id') } catch { /* storage may be disabled */ }
     })
-  }, [])
+  }, [hasTelegramInitData, ownerId])
 
   const openTab = (id: TabId) => {
     setTab(id)
     setVisitedTabs((current) => new Set(current).add(id))
   }
   const title = tab === 'writing' ? 'Writing' : tab === 'exam' ? 'Weekly exam' : navItems.find((item) => item.id === tab)?.label ?? 'Today'
+
+  if (!hasTelegramInitData || authError) {
+    return <main className="auth-gate" role="alert">
+      <span className="brand-mark" aria-hidden="true">i<span>.</span></span>
+      <h1>Open IELTS from Telegram</h1>
+      <p>{authError || 'Close this window and reopen the Mini App from your tutor’s private chat using /start.'}</p>
+    </main>
+  }
 
   return (
     <div className="app-shell">
@@ -188,21 +227,21 @@ export default function App() {
         </header>
 
         <main id="main-content" className="content-wrap" tabIndex={-1}>
-          {bootstrapError && <ErrorNotice message={bootstrapError} retry={() => void loadBootstrap()} />}
-          {bootstrapLoading && !bootstrap && <LoadingBlock />}
-          {visitedTabs.has('home') && <section hidden={tab !== 'home'}><Dashboard bootstrap={bootstrap} loading={bootstrapLoading} onNavigate={openTab} /></section>}
-          {visitedTabs.has('lesson') && <section hidden={tab !== 'lesson'}><LessonScreen lesson={bootstrap?.lesson ?? null} loading={bootstrapLoading} error={bootstrapError} retry={() => void loadBootstrap()} refresh={loadBootstrap} onNavigate={openTab} /></section>}
-          {visitedTabs.has('practice') && <section hidden={tab !== 'practice'}><PracticeScreen activeQuiz={activeQuiz} setActiveQuiz={setActiveQuiz} result={quizResult} setResult={setQuizResult} onNavigate={openTab} /></section>}
-          {visitedTabs.has('exam') && <section hidden={tab !== 'exam'}><ExamScreen activeExam={activeExam} setActiveExam={setActiveExam} result={examResult} setResult={setExamResult} /></section>}
-          {visitedTabs.has('words') && <section hidden={tab !== 'words'}><VocabularyScreen /></section>}
-          {visitedTabs.has('insights') && <section hidden={tab !== 'insights'}><InsightsScreen /></section>}
-          {visitedTabs.has('settings') && <section hidden={tab !== 'settings'}><SettingsScreen settings={bootstrap?.notifications ?? null} onSaved={(settings) => setBootstrap((value) => value ? { ...value, notifications: settings } : value)} /></section>}
-          {visitedTabs.has('writing') && <section hidden={tab !== 'writing'}><WritingScreen key={bootstrap?.user.telegram_id ?? 'unauthenticated'} ownerId={bootstrap?.user.telegram_id ?? null} /></section>}
+          {bootstrapError && <ErrorNotice message={bootstrapError} retry={hasTelegramInitData ? () => void loadBootstrap() : undefined} />}
+          {hasTelegramInitData && bootstrapLoading && !bootstrap && <LoadingBlock />}
+          {bootstrap && visitedTabs.has('home') && <section hidden={tab !== 'home'}><Dashboard bootstrap={bootstrap} loading={bootstrapLoading} onNavigate={openTab} /></section>}
+          {bootstrap && visitedTabs.has('lesson') && <section hidden={tab !== 'lesson'}><LessonScreen lesson={bootstrap.lesson} loading={bootstrapLoading} error={bootstrapError} retry={() => void loadBootstrap()} refresh={() => loadBootstrap().then(() => undefined)} onNavigate={openTab} /></section>}
+          {bootstrap && visitedTabs.has('practice') && <section hidden={tab !== 'practice'}><PracticeScreen activeQuiz={activeQuiz} setActiveQuiz={setActiveQuiz} result={quizResult} setResult={setQuizResult} onNavigate={openTab} /></section>}
+          {bootstrap && visitedTabs.has('exam') && <section hidden={tab !== 'exam'}><ExamScreen activeExam={activeExam} setActiveExam={setActiveExam} result={examResult} setResult={setExamResult} /></section>}
+          {bootstrap && visitedTabs.has('words') && <section hidden={tab !== 'words'}><VocabularyScreen examplesEnabled={bootstrap.gemini_configured === true} /></section>}
+          {bootstrap && visitedTabs.has('insights') && <section hidden={tab !== 'insights'}><InsightsScreen /></section>}
+          {bootstrap && visitedTabs.has('settings') && <section hidden={tab !== 'settings'}><SettingsScreen settings={bootstrap.notifications} onSaved={(settings) => setBootstrap((value) => value ? { ...value, notifications: settings } : value)} onCourseReset={loadBootstrap} /></section>}
+          {bootstrap && visitedTabs.has('writing') && <section hidden={tab !== 'writing'}><WritingScreen key={bootstrap.user.telegram_id} ownerId={bootstrap.user.telegram_id} /></section>}
         </main>
 
-        <nav className="mobile-nav" aria-label="Main navigation">
+        {bootstrap && <nav className="mobile-nav" aria-label="Main navigation">
           {navItems.map((item) => <NavButton key={item.id} item={item} active={tab === item.id} onClick={() => openTab(item.id)} compact />)}
-        </nav>
+        </nav>}
       </div>
     </div>
   )
@@ -222,7 +261,6 @@ function Dashboard({ bootstrap, loading, onNavigate }: { bootstrap: Bootstrap | 
   return (
     <div className="page-stack">
       <section className="welcome-row"><div><p className="eyebrow">YOUR STUDY JOURNAL</p><h1>Make today<br className="mobile-only" /> count<span className="period">.</span></h1><p className="welcome-copy">A focused session is enough to keep your English moving forward.</p></div><div className="today-stamp"><span>DAY</span><strong>{summary?.day ? String(summary.day).padStart(2, '0') : '—'}</strong><small>of your plan</small></div></section>
-      {!window.Telegram?.WebApp?.initData && <div className="notice notice-info" role="status"><Icon name="alert" size={18} /><p>Open this study space from your Telegram tutor to load your personal learning data.</p></div>}
       {loading && !bootstrap ? <LoadingBlock /> : null}
 
       <section className="today-card" aria-labelledby="today-title">
@@ -481,10 +519,12 @@ function ExamOutcome({ result, questions, onAgain }: { result: ExamResult; quest
   return <section className="quiz-outcome"><Tag tone="green">WEEK {String(result.week).padStart(2, '0')} · SAVED</Tag><div className="outcome-score"><strong>{result.score}<span>/{result.total}</span></strong><span>{result.percent}% correct</span></div><p className="outcome-disclaimer">{result.note || 'This is a practice result, not an official IELTS score.'}</p><div className="result-list">{result.results.map((item, index) => { const question = questions[item.index]; const chosen = item.selected >= 0 ? question?.options[item.selected] : null; return <article className="result-item" key={`${item.topic}-${index}`}><span className={item.correct ? 'result-mark correct' : 'result-mark'}>{item.correct ? '✓' : '!'}</span><div><strong>{item.topic || `Question ${index + 1}`}</strong><p>{chosen ? `Your answer: ${chosen}. ` : 'No answer selected. '}{item.correct ? 'Correct.' : `Correct answer: ${item.correct_option}. `}{item.explanation}</p></div></article> })}</div><button className="button button-dark" type="button" onClick={onAgain}>Start another exam <Icon name="arrow" size={16} /></button></section>
 }
 
-function VocabularyScreen() {
+function VocabularyScreen({ examplesEnabled }: { examplesEnabled: boolean }) {
   const [data, setData] = useState<DueVocabulary | null>(null)
   const [library, setLibrary] = useState<VocabularyWord[]>([])
   const [search, setSearch] = useState('')
+  const [libraryError, setLibraryError] = useState('')
+  const [libraryRetryCount, setLibraryRetryCount] = useState(0)
   const [libraryOpen, setLibraryOpen] = useState(true)
   const [question, setQuestion] = useState('')
   const [tutorAnswer, setTutorAnswer] = useState('')
@@ -508,11 +548,16 @@ function VocabularyScreen() {
   useEffect(() => {
     let cancelled = false
     setLibraryLoading(true)
+    setLibraryError('')
     void api.vocabularyLibrary(search).then((result) => { if (!cancelled) setLibrary(result.items) })
-      .catch(() => { if (!cancelled) setLibrary([]) })
+      .catch((reason) => {
+        if (cancelled) return
+        setLibrary([])
+        setLibraryError(reason instanceof Error ? reason.message : 'Could not load the course library.')
+      })
       .finally(() => { if (!cancelled) setLibraryLoading(false) })
     return () => { cancelled = true }
-  }, [search])
+  }, [search, libraryRetryCount])
   const askTutor = async (event: FormEvent) => {
     event.preventDefault()
     if (!question.trim() || tutorBusy) return
@@ -537,10 +582,49 @@ function VocabularyScreen() {
     finally { setSaving(false) }
   }
   return <div className="page-stack"><PageHeading eyebrow="VOCABULARY" title="Words worth keeping" description="Recall first, reveal after. Your review is saved to the tutor." action={<button className="button button-quiet" type="button" onClick={() => void load()} disabled={loading}><Icon name="spark" size={16} /> Refresh</button>} />
-    <section className="content-panel"><div className="panel-heading"><div><p className="eyebrow">YOUR COURSE LIBRARY</p><h2>Search 900 source words</h2></div><button className="text-button" type="button" onClick={() => setLibraryOpen((value) => !value)}>{libraryOpen ? 'Hide' : 'Show'}</button></div>{libraryOpen && <><label className="field-label" htmlFor="vocabulary-search">Search English, Russian or collocations</label><input id="vocabulary-search" className="text-input" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="e.g. environment" />{libraryLoading ? <LoadingBlock label="Searching course words" /> : library.length ? <div className="activity-list">{library.slice(0, 20).map((item) => <article className="activity-row" key={item.id}><div className="activity-row-main"><strong lang="en">{item.english}</strong><span>{item.transcription && `/${item.transcription}/`} · {item.translation}</span>{item.collocation && <span lang="en">{item.collocation} — {item.collocation_translation} {item.collocation_transcription && `/${item.collocation_transcription}/`}</span>}</div><Tag tone="quiet">W{item.week ?? '–'}</Tag></article>)}</div> : <EmptyState title={search ? 'No matching words' : 'Course words are not loaded'}>{search ? 'Try another spelling or search a collocation.' : 'The source vocabulary will appear after course import.'}</EmptyState>}</>}</section>
-    <section className="content-panel"><p className="eyebrow">COURSE QUESTION</p><h2>Ask about this week</h2><form className="settings-form" onSubmit={(event) => void askTutor(event)}><label className="field-label" htmlFor="course-question">Question for your tutor</label><textarea id="course-question" className="text-area" rows={3} maxLength={1000} value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask about this week's topic or words" /><button className="button button-dark" type="submit" disabled={tutorBusy || !question.trim()}>{tutorBusy ? 'Thinking…' : 'Ask Gemini'}</button></form>{tutorError && <ErrorNotice message={tutorError} />}{tutorAnswer && <p className="muted-copy" role="status">{tutorAnswer}</p>}</section>
-    {error && <ErrorNotice message={error} retry={retryAction ?? undefined} />}{loading ? <LoadingBlock label="Loading words to review" /> : !word ? <EmptyState title={reviewed ? 'Review complete' : 'Nothing due right now'}>{reviewed ? `${reviewed} ${reviewed === 1 ? 'word' : 'words'} reviewed in this session. Your next set appears when it is due.` : 'Your due vocabulary list is empty. New words will appear here when the tutor has material for you.'}</EmptyState> : <section className="word-review" aria-live="polite"><div className="word-review-top"><Tag>{word.topic || 'VOCABULARY'}</Tag><span>{index + 1} of {data?.count ?? words.length}</span></div><div className="word-card"><p className="eyebrow">WORD {String(index + 1).padStart(2, '0')}</p><h2 lang="en">{word.english}</h2>{word.transcription && <span className="transcription">/{word.transcription}/</span>}{revealed ? <div className="word-answer"><p className="translation">{word.translation}</p>{word.example && <p className="example" lang="en">“{word.example}”</p>}</div> : <p className="recall-prompt">Take a moment to remember what it means.</p>}</div>{!revealed ? <button className="button button-dark button-full" type="button" onClick={() => setRevealed(true)}>Reveal meaning <Icon name="spark" size={16} /></button> : <div className="review-actions"><button className="button button-quiet" type="button" disabled={saving} onClick={() => void review(false)}>Need practice</button><button className="button button-dark" type="button" disabled={saving} onClick={() => void review(true)}>{saving ? 'Saving…' : 'I remembered'} <Icon name="check" size={16} /></button></div>}{saving && <span className="sr-only" role="status">Saving vocabulary review</span>}</section>}
+    <section className="content-panel"><div className="panel-heading"><div><p className="eyebrow">YOUR COURSE LIBRARY</p><h2>Course library</h2></div><button className="text-button" type="button" onClick={() => setLibraryOpen((value) => !value)}>{libraryOpen ? 'Hide' : 'Show'}</button></div>{libraryOpen && <><label className="field-label" htmlFor="vocabulary-search">Search English, Russian or collocations</label><input id="vocabulary-search" className="text-input" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="e.g. environment" />{libraryLoading ? <LoadingBlock label="Searching course words" /> : libraryError ? <ErrorNotice message={libraryError} retry={() => setLibraryRetryCount((value) => value + 1)} /> : library.length ? <div className="activity-list">{library.slice(0, 20).map((item) => <article className="activity-row vocabulary-library-row" key={item.id}><div className="activity-row-main"><strong lang="en">{item.english}</strong><span>{item.transcription && `/${item.transcription}/`} · {item.translation}</span>{item.collocation && <span lang="en">{item.collocation} — {item.collocation_translation} {item.collocation_transcription && `/${item.collocation_transcription}/`}</span>}</div><Tag tone="quiet">W{item.week ?? '–'}</Tag>{examplesEnabled && <WordExamples key={item.id} word={item} />}</article>)}</div> : <EmptyState title={search ? 'No matching words' : 'Course words are not loaded'}>{search ? 'Try another spelling or search a collocation.' : 'The source vocabulary will appear after course import.'}</EmptyState>}</>}</section>
+    <section className="content-panel"><p className="eyebrow">COURSE QUESTION</p><h2>Ask about this week</h2><form className="settings-form tutor-form" onSubmit={(event) => void askTutor(event)}><label className="field-label" htmlFor="course-question">Question for your tutor</label><textarea id="course-question" className="text-area" rows={3} maxLength={1000} value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask about this week's topic or words" /><button className="button button-dark" type="submit" disabled={tutorBusy || !question.trim()}>{tutorBusy ? 'Thinking…' : 'Ask Gemini'}</button></form>{tutorError && <ErrorNotice message={tutorError} />}{tutorAnswer && <p className="muted-copy" role="status">{tutorAnswer}</p>}</section>
+    {error && <ErrorNotice message={error} retry={retryAction ?? undefined} />}{loading ? <LoadingBlock label="Loading words to review" /> : !word ? <EmptyState title={reviewed ? 'Review complete' : 'Nothing due right now'}>{reviewed ? `${reviewed} ${reviewed === 1 ? 'word' : 'words'} reviewed in this session. Your next set appears when it is due.` : 'Your due vocabulary list is empty. New words will appear here when the tutor has material for you.'}</EmptyState> : <section className="word-review" aria-live="polite"><div className="word-review-top"><Tag>{word.topic || 'VOCABULARY'}</Tag><span>{index + 1} of {data?.count ?? words.length}</span></div><div className="word-card"><p className="eyebrow">WORD {String(index + 1).padStart(2, '0')}</p><h2 lang="en">{word.english}</h2>{word.transcription && <span className="transcription">/{word.transcription}/</span>}{revealed ? <div className="word-answer"><p className="translation">{word.translation}</p>{word.example && <p className="example" lang="en">“{word.example}”</p>}</div> : <p className="recall-prompt">Take a moment to remember what it means.</p>}</div>{examplesEnabled && <WordExamples key={word.id} word={word} />}{!revealed ? <button className="button button-dark button-full" type="button" onClick={() => setRevealed(true)}>Reveal meaning <Icon name="spark" size={16} /></button> : <div className="review-actions"><button className="button button-quiet" type="button" disabled={saving} onClick={() => void review(false)}>Need practice</button><button className="button button-dark" type="button" disabled={saving} onClick={() => void review(true)}>{saving ? 'Saving…' : 'I remembered'} <Icon name="check" size={16} /></button></div>}{saving && <span className="sr-only" role="status">Saving vocabulary review</span>}</section>}
     <p className="support-note">Your answers help schedule the next review. They are not displayed as a language proficiency score.</p></div>
+}
+
+function WordExamples({ word }: { word: VocabularyWord }) {
+  const [items, setItems] = useState<Array<{ english: string; translation: string }> | null>(null)
+  const [cached, setCached] = useState(false)
+  const [expanded, setExpanded] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const loadExamples = async () => {
+    if (loading) return
+    if (items) {
+      setExpanded((value) => !value)
+      return
+    }
+    setLoading(true)
+    setError('')
+    try {
+      const result = await api.vocabularyExamples(word.id)
+      setItems(result.items)
+      setCached(result.cached)
+      setExpanded(true)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not load examples. Please retry.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return <div className="word-examples">
+    <button className="button button-quiet examples-toggle" type="button" disabled={loading} aria-expanded={expanded} onClick={() => void loadExamples()}>
+      {loading ? <><span className="button-spinner" /> Loading examples…</> : items ? `${expanded ? 'Hide' : 'Show'} 10 examples` : 'Show 10 examples'}
+    </button>
+    {error && <div className="examples-error" role="alert"><p>{error}</p><button className="text-button" type="button" disabled={loading} onClick={() => void loadExamples()}>Retry</button></div>}
+    {items && expanded && <div className="examples-content" aria-live="polite">
+      <p className="examples-status">{cached ? 'Saved examples' : '10 examples'} · English with Russian translation</p>
+      <ol>{items.map((item, index) => <li key={`${index}-${item.english}`}><p lang="en">{item.english}</p><p lang="ru">{item.translation}</p></li>)}</ol>
+    </div>}
+  </div>
 }
 
 function InsightsScreen() {
@@ -580,13 +664,27 @@ function formatDate(value: string) {
   return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' }).format(date)
 }
 
-function SettingsScreen({ settings, onSaved }: { settings: NotificationSettings | null; onSaved: (settings: NotificationSettings) => void }) {
+function createRequestId() {
+  const bytes = new Uint8Array(16)
+  window.crypto.getRandomValues(bytes)
+  bytes[6] = (bytes[6] & 0x0f) | 0x40
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  const hex = Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+
+function SettingsScreen({ settings, onSaved, onCourseReset }: { settings: NotificationSettings | null; onSaved: (settings: NotificationSettings) => void; onCourseReset: () => Promise<boolean> }) {
   const [draft, setDraft] = useState<NotificationSettings | null>(settings)
   const [loading, setLoading] = useState(!settings)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [retryAction, setRetryAction] = useState<(() => void) | null>(null)
   const [saved, setSaved] = useState(false)
+  const [resetConfirm, setResetConfirm] = useState(false)
+  const [resetRequestId, setResetRequestId] = useState('')
+  const [resetting, setResetting] = useState(false)
+  const [resetError, setResetError] = useState('')
+  const [resetSuccess, setResetSuccess] = useState('')
   useEffect(() => { if (settings) { setDraft(settings); setLoading(false) } }, [settings])
   const load = useCallback(async () => {
     setLoading(true); setError('')
@@ -602,13 +700,30 @@ function SettingsScreen({ settings, onSaved }: { settings: NotificationSettings 
     catch (reason) { setError(reason instanceof Error ? reason.message : 'Your settings could not be saved.'); setRetryAction(() => () => void save()) }
     finally { setSaving(false) }
   }
+  const resetCourse = async () => {
+    if (resetting) return
+    const requestId = resetRequestId || createRequestId()
+    setResetRequestId(requestId)
+    setResetting(true); setResetError(''); setResetSuccess('')
+    try {
+      await api.resetCourse(requestId)
+      const refreshed = await onCourseReset()
+      setResetConfirm(false)
+      setResetRequestId('')
+      setResetSuccess(refreshed
+        ? 'Course restarted. Your next lesson is Day 1; history and spaced repetition are preserved.'
+        : 'Course restarted, but the latest progress could not be loaded. Refresh this page to see the updated totals.')
+    } catch (reason) {
+      setResetError(reason instanceof Error ? reason.message : 'The course could not be restarted. Please retry.')
+    } finally { setResetting(false) }
+  }
   return <div className="page-stack"><PageHeading eyebrow="PREFERENCES" title="Make it yours" description="Set how the tutor fits into your day." />
     {error && <ErrorNotice message={error} retry={retryAction ?? undefined} />}{loading ? <LoadingBlock label="Loading notification settings" /> : draft && <><section className="settings-panel"><div className="panel-heading"><div><p className="eyebrow">TELEGRAM REMINDERS</p><h2>A nudge at the right time</h2></div><Tag tone="green">SAVED SETTINGS</Tag></div><p className="panel-intro">Reminder messages are sent by your Telegram tutor. Your device notification permissions are controlled in Telegram.</p>
       <SwitchRow id="reminders" label="Daily study reminder" description="Receive a reminder at your selected time." checked={draft.reminders_enabled} onChange={(checked) => { setDraft({ ...draft, reminders_enabled: checked }); setSaved(false) }} />
       <SwitchRow id="quiet" label="Quiet mode" description="Pause non-essential tutor messages." checked={draft.quiet_mode} onChange={(checked) => { setDraft({ ...draft, quiet_mode: checked }); setSaved(false) }} />
       <div className="setting-time"><div><label htmlFor="reminder-time">Reminder time</label><p>Local time · {draft.timezone}</p></div><input id="reminder-time" type="time" value={draft.reminder_time} disabled={!draft.reminders_enabled} onChange={(event) => { setDraft({ ...draft, reminder_time: event.target.value }); setSaved(false) }} /></div>
       <div className="setting-save"><span className="save-status" role="status" aria-live="polite">{saved ? 'Changes saved' : 'Changes are not saved yet'}</span><button className="button button-dark" type="button" disabled={saving || saved} onClick={() => void save()}>{saving ? 'Saving…' : 'Save settings'} <Icon name="check" size={16} /></button></div>
-    </section><p className="support-note">Settings apply to this tutor account. This page does not request browser or device notification permissions.</p></>}</div>
+    </section><section className="settings-panel reset-panel" aria-labelledby="restart-course-title"><div className="panel-heading"><div><p className="eyebrow">COURSE PROGRESS</p><h2 id="restart-course-title">Start the course again</h2></div></div><p className="panel-intro">This resets your course day, daily checklist, completed-day count and streak. Your practice, writing and exam history, vocabulary, and spaced-repetition schedule stay saved.</p>{resetError && <ErrorNotice message={resetError} retry={() => void resetCourse()} />}{resetSuccess && <p className="reset-success" role="status">{resetSuccess}</p>}{resetConfirm ? <div className="reset-confirm" role="group" aria-label="Confirm course restart"><p>Restart your course at Day 1 and clear the course completion counters?</p><div className="reset-actions"><button className="button button-quiet" type="button" disabled={resetting} onClick={() => { setResetConfirm(false); setResetRequestId('') }}>Keep my progress</button><button className="button button-danger" type="button" disabled={resetting} onClick={() => void resetCourse()}>{resetting ? <><span className="button-spinner" /> Restarting…</> : 'Confirm restart'}</button></div></div> : <button className="button button-quiet reset-open" type="button" disabled={resetting} onClick={() => { setResetError(''); setResetSuccess(''); setResetRequestId(createRequestId()); setResetConfirm(true) }}>Restart course</button>}</section><p className="support-note">Settings apply to this tutor account. This page does not request browser or device notification permissions.</p></>}</div>
 }
 
 function SwitchRow({ id, label, description, checked, onChange }: { id: string; label: string; description: string; checked: boolean; onChange: (checked: boolean) => void }) {

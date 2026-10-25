@@ -14,19 +14,26 @@ import {
   type WritingAttemptDetail,
   type WritingAttemptSummary,
   type VocabularyLibrary,
+  type VocabularyExamples,
   type CourseRoadmap,
+  type CourseResetResult,
 } from './types'
 
 const API_ROOT = '/api/v1'
+let authFailure: ApiError | null = null
 
 function initData(): string {
   return window.Telegram?.WebApp?.initData ?? ''
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  if (authFailure) throw authFailure
   const data = initData()
   if (!data) {
-    throw new ApiError('Open this study space from your Telegram tutor to continue.', 'auth')
+    throw new ApiError(
+      'Telegram did not provide signed launch data. Close this window, then reopen the app from the tutor’s private chat using /start and “Open app”.',
+      'auth',
+    )
   }
 
   let response: Response
@@ -45,7 +52,9 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
 
   if (response.status === 401 || response.status === 403) {
-    throw new ApiError('Telegram could not verify this session. Close and reopen the Mini App.', 'auth')
+    authFailure = new ApiError('Telegram could not verify this session. Close and reopen the Mini App from your tutor.', 'auth')
+    window.dispatchEvent(new CustomEvent('ielts-auth-error', { detail: authFailure.message }))
+    throw authFailure
   }
 
   const payload: unknown = await response.json().catch(() => null)
@@ -93,6 +102,15 @@ export const api = {
   ),
   reviewVocabulary: (id: number, correct: boolean) =>
     request<DueVocabulary['items'][number]>(`/vocabulary/${id}/review`, json('POST', { correct })),
+  vocabularyExamples: async (id: number): Promise<VocabularyExamples> => {
+    const result = await request<VocabularyExamples>(`/vocabulary/${id}/examples`, json('POST'))
+    if (!result || !Array.isArray(result.items) || result.items.length !== 10 || typeof result.cached !== 'boolean'
+      || result.items.some((item) => !item || typeof item.english !== 'string' || !item.english.trim()
+        || typeof item.translation !== 'string' || !item.translation.trim())) {
+      throw new ApiError('The tutor returned an incomplete example set. Please retry.', 'unknown', 'invalid_examples_response')
+    }
+    return result
+  },
   startExam: () => request<ExamSession>('/exam/sessions', json('POST')),
   getExam: (id: number) => request<ExamSession>(`/exam/sessions/${id}`),
   answerExam: (id: number, questionIndex: number, answerIndex: number) =>
@@ -106,6 +124,9 @@ export const api = {
   settings: () => request<NotificationSettings>('/settings/notifications'),
   saveSettings: (settings: Partial<NotificationSettings>) =>
     request<NotificationSettings>('/settings/notifications', json('PATCH', settings)),
+  resetCourse: (requestId: string) => request<CourseResetResult>(
+    '/learning/reset', json('POST', { confirm: true, request_id: requestId }),
+  ),
   evaluateWriting: (text: string, taskType: string) => request<WritingFeedback>(
     '/writing/evaluate', json('POST', { text, task_type: taskType }),
   ),

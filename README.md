@@ -82,7 +82,7 @@ python -m scripts.import_course "C:\полный\путь\IELTS_7_5_250_istoriy_
 2. Добавьте persistent volume и смонтируйте его в `/data`.
 3. Задайте переменные из `.env.example`; `WEBHOOK_BASE_URL` должен быть HTTPS-доменом службы.
 4. Включите Serverless для webhook service. Он засыпает, когда не посылает исходящие пакеты; входящий запрос пробуждает его. Первое сообщение может прийти с задержкой холодного старта.
-5. Создайте отдельный cron service из того же репозитория с командой `python -m app.daily_trigger`, расписание `0 19 * * *` (00:00 Asia/Tashkent), `DAILY_JOB_URL=https://<domain>/internal/daily` и таким же `DAILY_JOB_SECRET`.
+5. Создайте один Railway cron service из того же репозитория с командой `python -m app.daily_trigger`, `DAILY_JOB_URL=https://<domain>/internal/daily` и таким же `DAILY_JOB_SECRET`. Расписание `0 3,9 * * *` (UTC) запускает его дважды в сутки; trigger сам пропускает неподходящий слот: в будни отправляет только в 14:00 Asia/Tashkent, в выходные — только в 08:00. Требуется задать `TIMEZONE=Asia/Tashkent`. Railway оценивает cron в UTC; проверьте фактическую доставку после развёртывания.
 6. Установите `DATABASE_URL=sqlite:////data/ielts.db` только на webhook service. Том прикреплён только к этому сервису; cron обращается к сохранённой БД через защищённый HTTPS endpoint.
 7. Проверьте Telegram webhook и ежедневный trigger в логах deployment. Не считайте статус сборки подтверждением реальной доставки.
 

@@ -10,29 +10,37 @@ Routes are rooted at ``/api/v1``. Errors use ``{"error": {"code", "message"}}``.
 import json
 import logging
 import re
-from datetime import datetime
+from datetime import UTC, date, datetime, timedelta
+from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from aiohttp import web
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
+from sqlalchemy.exc import IntegrityError
 
 from app.ai.budget_manager import BudgetExceeded
 from app.ai.gemini_tutor import GeminiTutorError, ask_course_tutor
+from app.ai.vocabulary_examples import VocabularyExamplesError, generate_vocabulary_examples
 from app.ai.writing_examiner import examine
 from app.config import get_settings
 from app.database.models import (
     Activity,
     AIUsage,
     CourseDay,
+    CourseDayVocabulary,
     CourseWeek,
     ErrorLog,
     ExamSession,
+    GeminiDailyQuota,
     QuizSession,
     UserSettings,
     Vocabulary,
+    VocabularyExampleSet,
     VocabularyProgress,
     WritingAttempt,
 )
 from app.database.session import SessionLocal
+from app.learning.course_reset import reset_course
 from app.learning.course_sources import new_cards_for_day
 from app.learning.daily_tests import answer_quiz, start_quiz, submit_quiz
 from app.learning.lessons import TASKS, complete_task, current_day, finish_day, lesson_summary
@@ -101,6 +109,70 @@ def _settings(session, owner_id: int) -> UserSettings:
         session.add(row)
         session.flush()
     return row
+
+
+def _date_in_timezone(value: datetime, timezone: str) -> date:
+    aware_value = value.replace(tzinfo=UTC) if value.tzinfo is None else value
+    return aware_value.astimezone(ZoneInfo(timezone)).date()
+
+
+def _reserve_gemini_request(session, owner_id: int, request_date, limit: int) -> AIUsage:
+    """Atomically reserve one shared Gemini request for this owner and local date."""
+    quota = session.scalar(
+        select(GeminiDailyQuota).where(
+            GeminiDailyQuota.owner_id == owner_id,
+            GeminiDailyQuota.request_date == request_date,
+        )
+    )
+    if quota is None:
+        legacy_count = session.scalar(
+            select(func.count(AIUsage.id)).where(
+                AIUsage.owner_id == owner_id,
+                AIUsage.request_date == request_date,
+                AIUsage.provider == "gemini",
+            )
+        ) or 0
+        quota = GeminiDailyQuota(
+            owner_id=owner_id,
+            request_date=request_date,
+            request_count=legacy_count,
+        )
+        try:
+            with session.begin_nested():
+                session.add(quota)
+                session.flush()
+        except IntegrityError:
+            quota = session.scalar(
+                select(GeminiDailyQuota).where(
+                    GeminiDailyQuota.owner_id == owner_id,
+                    GeminiDailyQuota.request_date == request_date,
+                )
+            )
+            if quota is None:
+                raise
+
+    reserved = session.execute(
+        update(GeminiDailyQuota)
+        .where(
+            GeminiDailyQuota.owner_id == owner_id,
+            GeminiDailyQuota.request_date == request_date,
+            GeminiDailyQuota.request_count < limit,
+        )
+        .values(request_count=GeminiDailyQuota.request_count + 1)
+    )
+    if reserved.rowcount != 1:  # type: ignore[attr-defined]
+        raise ApiError(
+            429, "tutor_limit", "Today's Gemini learning request limit has been reached."
+        )
+    usage = AIUsage(
+        owner_id=owner_id,
+        provider="gemini",
+        month=request_date.strftime("%Y-%m"),
+        request_date=request_date,
+    )
+    session.add(usage)
+    session.commit()
+    return usage
 
 
 def _question_payload(raw: dict, index: int) -> dict:
@@ -238,6 +310,7 @@ async def bootstrap(request: web.Request) -> web.Response:
         session.commit()
         return web.json_response(
             {
+                "gemini_configured": get_settings().gemini_api_key is not None,
                 "user": {"telegram_id": owner_id},
                 "dashboard": {
                     "day": day,
@@ -330,7 +403,7 @@ async def complete_lesson_task(request: web.Request) -> web.Response:
             )
         if not complete_task(session, owner_id, day_number, task_key):
             raise ApiError(422, "task_not_completed", "Lesson task could not be completed.")
-        if task_key == "vocabulary":
+        if task_key == "vocabulary" and course_day is not None:
             from app.learning.course_sources import new_cards_for_day
 
             summary = lesson_summary(session, owner_id, day_number)
@@ -349,15 +422,6 @@ async def complete_lesson_task(request: web.Request) -> web.Response:
                             (Vocabulary.owner_id == owner_id) | Vocabulary.owner_id.is_(None),
                         )
                     )
-                )
-            if day_number % 7 == 0:
-                for card in cards:
-                    mark_course_day_reviewed(session, owner_id, day_number, card)
-            elif course_day is None and len(cards) != len(sequences):
-                raise ApiError(
-                    409,
-                    "course_vocabulary_incomplete",
-                    "Scheduled word cards are unavailable.",
                 )
             if not cards:
                 raise ApiError(409, "vocabulary_not_due", "No scheduled vocabulary is available.")
@@ -441,7 +505,7 @@ async def quiz_submit(request: web.Request) -> web.Response:
 async def exam_start(request: web.Request) -> web.Response:
     owner_id = _owner(request)
     with SessionLocal() as session:
-        week = min(26, max(1, (current_day(session, owner_id) - 1) // 7 + 1))
+        week = min(30, max(1, (current_day(session, owner_id) - 1) // 7 + 1))
         exam = start_exam(session, owner_id, week)
         return web.json_response(_serialize_exam(exam), status=201)
 
@@ -497,6 +561,96 @@ async def vocabulary_due(request: web.Request) -> web.Response:
     with SessionLocal() as session:
         words = due_words(session, limit=limit, owner_id=owner_id)
         return web.json_response({"items": [_word(word) for word in words], "count": len(words)})
+
+
+async def vocabulary_examples(request: web.Request) -> web.Response:
+    owner_id = _owner(request)
+    try:
+        word_id = int(request.match_info["word_id"])
+    except ValueError:
+        raise ApiError(404, "word_not_found", "Vocabulary item was not found.") from None
+    settings = get_settings()
+    if settings.gemini_api_key is None:
+        raise ApiError(503, "examples_unavailable", "Gemini examples are not configured.")
+    with SessionLocal() as session:
+        word = session.scalar(
+            select(Vocabulary).where(
+                Vocabulary.id == word_id,
+                (Vocabulary.owner_id == owner_id) | Vocabulary.owner_id.is_(None),
+            )
+        )
+        if word is None:
+            raise ApiError(404, "word_not_found", "Vocabulary item was not found.")
+        cached = session.scalar(
+            select(VocabularyExampleSet).where(VocabularyExampleSet.vocabulary_id == word.id)
+        )
+        if cached is not None:
+            if cached.examples_json != "[]":
+                return web.json_response(
+                    {"items": json.loads(cached.examples_json), "cached": True}
+                )
+            lease_now = datetime.now(UTC).replace(tzinfo=None)
+            expired_before = lease_now - timedelta(minutes=2)
+            lease = session.execute(
+                update(VocabularyExampleSet)
+                .where(
+                    VocabularyExampleSet.id == cached.id,
+                    VocabularyExampleSet.examples_json == "[]",
+                    or_(
+                        VocabularyExampleSet.pending_since.is_(None),
+                        VocabularyExampleSet.pending_since < expired_before,
+                    ),
+                )
+                .values(pending_since=lease_now)
+            )
+            if lease.rowcount != 1:  # type: ignore[attr-defined]
+                raise ApiError(
+                    409, "examples_generating", "Examples are being prepared. Retry shortly."
+                )
+            placeholder = cached
+            session.commit()
+        else:
+            lease_now = datetime.now(UTC).replace(tzinfo=None)
+            placeholder = VocabularyExampleSet(
+                vocabulary_id=word.id,
+                examples_json="[]",
+                pending_since=lease_now,
+            )
+            session.add(placeholder)
+            try:
+                session.commit()
+            except IntegrityError:
+                session.rollback()
+                raise ApiError(
+                    409, "examples_generating", "Examples are being prepared. Retry shortly."
+                ) from None
+        now = _date_in_timezone(datetime.now(UTC), settings.timezone)
+        try:
+            usage_record = _reserve_gemini_request(
+                session, owner_id, now, settings.max_daily_gemini_requests
+            )
+        except ApiError:
+            session.delete(placeholder)
+            session.commit()
+            raise
+        try:
+            result = await generate_vocabulary_examples(
+                api_key=settings.gemini_api_key.get_secret_value(),
+                model=settings.gemini_model,
+                english=word.english,
+                translation=word.translation,
+                topic=word.topic,
+            )
+        except VocabularyExamplesError as exc:
+            session.delete(placeholder)
+            session.commit()
+            raise ApiError(502, "examples_error", str(exc)) from None
+        placeholder.examples_json = json.dumps(result.items, ensure_ascii=False)
+        placeholder.pending_since = None
+        usage_record.input_tokens = result.prompt_tokens
+        usage_record.output_tokens = result.output_tokens
+        session.commit()
+        return web.json_response({"items": result.items, "cached": False})
 
 
 async def vocabulary_library(request: web.Request) -> web.Response:
@@ -589,7 +743,40 @@ async def vocabulary_review(request: web.Request) -> web.Response:
         )
         if word is None:
             raise ApiError(404, "word_not_found", "Vocabulary item was not found.")
+        if word.source_key is not None:
+            day = current_day(session, owner_id)
+            assignment = session.scalar(
+                select(CourseDayVocabulary).where(
+                    CourseDayVocabulary.owner_id == owner_id,
+                    CourseDayVocabulary.day_number == day,
+                    CourseDayVocabulary.vocabulary_id == word.id,
+                )
+            )
+            state_before = session.scalar(
+                select(VocabularyProgress).where(
+                    VocabularyProgress.owner_id == owner_id,
+                    VocabularyProgress.vocabulary_id == word.id,
+                )
+            )
+            if assignment is None and (
+                state_before is None or state_before.next_review > datetime.now().date()
+            ):
+                raise ApiError(
+                    409,
+                    "word_not_due",
+                    "This course word is not assigned or due for review today.",
+                )
+            if assignment is not None and assignment.reviewed:
+                raise ApiError(
+                    409,
+                    "word_already_reviewed",
+                    "This card was already reviewed today.",
+                )
         state = record_review_for_owner(session, word, owner_id, correct)
+        if word.source_key is not None:
+            mark_course_day_reviewed(
+                session, owner_id, current_day(session, owner_id), word
+            )
         session.add(
             Activity(
                 owner_id=owner_id, kind="review", topic=word.topic, score=100 if correct else 0
@@ -611,19 +798,7 @@ async def learning_tutor(request: web.Request) -> web.Response:
     if settings.gemini_api_key is None:
         raise ApiError(503, "tutor_unavailable", "Учебный помощник пока не настроен.")
     with SessionLocal() as session:
-        now = datetime.now().date()
-        used = (
-            session.scalar(
-                select(func.count(AIUsage.id)).where(
-                    AIUsage.owner_id == owner_id,
-                    AIUsage.request_date == now,
-                    AIUsage.provider == "gemini",
-                )
-            )
-            or 0
-        )
-        if used >= settings.max_daily_gemini_requests:
-            raise ApiError(429, "tutor_limit", "На сегодня лимит учебных вопросов исчерпан.")
+        now = _date_in_timezone(datetime.now(UTC), settings.timezone)
         day = current_day(session, owner_id)
         week = session.scalar(
             select(CourseWeek).where(CourseWeek.week_number == min(30, (day - 1) // 7 + 1))
@@ -644,6 +819,9 @@ async def learning_tutor(request: web.Request) -> web.Response:
         excerpt = "\n".join(
             (week.grammar, week.listening, week.reading_writing, week.speaking_outcome)
         )[:2500]
+        usage_record = _reserve_gemini_request(
+            session, owner_id, now, settings.max_daily_gemini_requests
+        )
         try:
             result = await ask_course_tutor(
                 api_key=settings.gemini_api_key.get_secret_value(),
@@ -655,16 +833,8 @@ async def learning_tutor(request: web.Request) -> web.Response:
             )
         except GeminiTutorError as exc:
             raise ApiError(502, "tutor_error", str(exc)) from None
-        session.add(
-            AIUsage(
-                owner_id=owner_id,
-                month=now.strftime("%Y-%m"),
-                request_date=now,
-                provider="gemini",
-                input_tokens=result.prompt_tokens,
-                output_tokens=result.output_tokens,
-            )
-        )
+        usage_record.input_tokens = result.prompt_tokens
+        usage_record.output_tokens = result.output_tokens
         session.commit()
         return web.json_response({"answer": result.text, "week": week.week_number})
 
@@ -882,6 +1052,35 @@ async def notification_settings(request: web.Request) -> web.Response:
         )
 
 
+async def learning_reset(request: web.Request) -> web.Response:
+    owner_id = _owner(request)
+    data = await _body(request)
+    request_key = data.get("request_id")
+    try:
+        normalized_key = str(UUID(request_key)) if isinstance(request_key, str) else ""
+    except ValueError:
+        normalized_key = ""
+    if (
+        data.get("confirm") is not True
+        or set(data) != {"confirm", "request_id"}
+        or not normalized_key
+    ):
+        raise ApiError(
+            400,
+            "confirmation_required",
+            "Send confirm=true and a UUID request_id to restart your course.",
+        )
+    with SessionLocal() as session:
+        settings = reset_course(session, owner_id, normalized_key)
+        return web.json_response(
+            {
+                "completed_days": settings.completed_days,
+                "current_day": settings.current_day,
+                "streak": settings.streak,
+            }
+        )
+
+
 def register_routes(app: web.Application) -> None:
     """Register Mini App routes on the host aiohttp app after auth middleware."""
     app.router.add_get(f"{API_PREFIX}/bootstrap", bootstrap)
@@ -900,6 +1099,7 @@ def register_routes(app: web.Application) -> None:
     app.router.add_put(f"{API_PREFIX}/exam/sessions/{{exam_id}}/answers", exam_answer)
     app.router.add_post(f"{API_PREFIX}/exam/sessions/{{exam_id}}/submit", exam_submit)
     app.router.add_get(f"{API_PREFIX}/vocabulary/due", vocabulary_due)
+    app.router.add_post(f"{API_PREFIX}/vocabulary/{{word_id}}/examples", vocabulary_examples)
     app.router.add_get(f"{API_PREFIX}/vocabulary/library", vocabulary_library)
     app.router.add_get(f"{API_PREFIX}/vocabulary/today", vocabulary_today)
     app.router.add_post(f"{API_PREFIX}/vocabulary/{{word_id}}/review", vocabulary_review)
@@ -911,3 +1111,4 @@ def register_routes(app: web.Application) -> None:
     app.router.add_get(f"{API_PREFIX}/writing/attempts/{{attempt_id}}", writing_attempt_detail)
     app.router.add_get(f"{API_PREFIX}/settings/notifications", notification_settings)
     app.router.add_patch(f"{API_PREFIX}/settings/notifications", notification_settings)
+    app.router.add_post(f"{API_PREFIX}/learning/reset", learning_reset)

@@ -1,6 +1,12 @@
 from datetime import date
 
-from app.database.models import Activity, CourseDay, Vocabulary
+from app.database.models import (
+    Activity,
+    CourseDay,
+    CourseDayVocabulary,
+    CourseWeek,
+    Vocabulary,
+)
 from app.learning.adaptive import adapt_day, recommendation, weak_topics
 from app.learning.daily_tests import (
     QUESTIONS,
@@ -11,7 +17,12 @@ from app.learning.daily_tests import (
     submit_quiz,
 )
 from app.learning.lessons import TASKS, complete_task, finish_day, lesson_summary
-from app.learning.vocabulary import due_words, record_review
+from app.learning.vocabulary import (
+    due_words,
+    mark_course_day_reviewed,
+    record_review,
+    record_review_for_owner,
+)
 from app.learning.weekly_exams import record_exam_answer, start_exam, submit_exam
 
 
@@ -54,6 +65,75 @@ def test_missing_course_has_no_completable_blocks(session):
     assert all(not row["available"] for row in lesson_summary(session, 101)["tasks"])
     assert not complete_task(session, 101, 1, "quiz")
     assert not finish_day(session, 101, 1)
+
+
+def test_course_day_is_not_done_until_every_assigned_card_is_recalled(session):
+    session.add(CourseWeek(week_number=1, month=1, topic="Introductions"))
+    cards = [
+        Vocabulary(
+            english=f"word-{number}",
+            translation=f"перевод-{number}",
+            source_key=f"pdf:{number:03d}",
+            course_week=1,
+            topic="Introductions",
+        )
+        for number in range(1, 6)
+    ]
+    session.add_all(cards)
+    session.commit()
+
+    summary = lesson_summary(session, 101, 1)
+    task = summary["tasks"][0]
+    assert summary["week"] == 1 and summary["day"] == 1
+    assert task["available"] and not task["done"]
+    assert task["new_cards"] == 5
+    assert session.query(CourseDayVocabulary).filter_by(owner_id=101, day_number=1).count() == 5
+    assert not any(
+        assignment.reviewed
+        for assignment in session.query(CourseDayVocabulary).filter_by(
+            owner_id=101, day_number=1
+        )
+    )
+    assert not due_words(session, owner_id=202)
+    assert not complete_task(session, 101, 1, "vocabulary")
+
+    for card in cards:
+        record_review_for_owner(session, card, 101, True)
+        mark_course_day_reviewed(session, 101, 1, card)
+    assert complete_task(session, 101, 1, "vocabulary")
+    assert finish_day(session, 101, 1)
+    assert lesson_summary(session, 101, 1)["tasks"][0]["done"]
+
+
+def test_review_only_sunday_can_complete_when_no_cards_are_due(session):
+    session.add(CourseWeek(week_number=1, month=1, topic="Introductions"))
+    session.commit()
+
+    summary = lesson_summary(session, 101, 7)
+    task = summary["tasks"][0]
+    assert summary["day"] == 7
+    assert task["available"] and not task["done"]
+    assert task["due_cards"] == 0
+    assert complete_task(session, 101, 7, "review")
+    assert finish_day(session, 101, 7)
+
+
+def test_unassigned_course_cards_are_not_in_any_learners_due_queue(session):
+    session.add_all(
+        [
+            Vocabulary(
+                english=f"catalogue-{number}",
+                translation=f"слово-{number}",
+                source_key=f"pdf:{number:03d}",
+                course_week=1,
+            )
+            for number in range(1, 31)
+        ]
+    )
+    session.commit()
+
+    assert due_words(session, owner_id=101) == []
+    assert due_words(session, owner_id=202) == []
 
 
 def test_vocabulary_spaced_repetition_and_owner_filter(session):

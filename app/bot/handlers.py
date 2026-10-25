@@ -23,6 +23,7 @@ from app.bot.keyboards import (
 from app.config import get_settings
 from app.database.models import (
     Activity,
+    CourseWeek,
     ErrorLog,
     ExamSession,
     ObsidianSave,
@@ -44,7 +45,13 @@ from app.learning.adaptive import adapt_day
 from app.learning.daily_tests import answer_quiz, submit_quiz
 from app.learning.lessons import complete_task, current_day, finish_day, lesson_summary
 from app.learning.reports import progress_report
-from app.learning.vocabulary import add_word, due_words, record_review, search_words
+from app.learning.vocabulary import (
+    add_word,
+    due_words,
+    mark_course_day_reviewed,
+    record_review_for_owner,
+    search_words,
+)
 from app.learning.weekly_exams import record_exam_answer, submit_exam
 
 router = Router()
@@ -283,19 +290,15 @@ async def save_note_text(message: Message, state: FSMContext) -> None:
 
 @router.message(CommandStart())
 async def start(message: Message) -> None:
-    settings = get_settings()
-    app_url = settings.webhook_base_url.rstrip("/") if settings.webhook_base_url else ""
     await answer(
         message,
         "Привет! Я помогу заниматься по программе IELTS Academic. Выбирайте действия "
-        "кнопками внизу чата. Обычный текст нужен для ответов, словаря и Writing.\n\n"
+        "кнопкой «Открыть приложение» внизу чата. План курса — 30 недель и 210 учебных дней.\n\n"
         "Результаты — учебная оценка, не официальный IELTS Band Score.\n"
-        "GPT используется только по вашему выбору для проверки Writing.",
-        reply_markup=(
-            mini_app_launch_keyboard(app_url)
-            if app_url.startswith("https://")
-            else MAIN_MENU
-        ),
+        "В Telegram я показываю краткий план; слова, тесты и прогресс открываются в приложении.\n"
+        "OpenAI используется только по вашему выбору для проверки Writing.",
+        # Re-send the current keyboard on /start so old chat menus are replaced.
+        reply_markup=MAIN_MENU,
     )
 
 
@@ -304,6 +307,21 @@ async def keyboard_menu_action(message: Message, state: FSMContext) -> None:
     """Route persistent Telegram keyboard labels to the same handlers as inline buttons."""
     action = MENU_ACTIONS[message.text or ""]
     await state.clear()
+    if action == "app":
+        app_url = get_settings().webhook_base_url or ""
+        if app_url.startswith("https://"):
+            await answer(
+                message,
+                "Нажмите кнопку ниже, чтобы открыть приложение с вашей учебной сессией:",
+                reply_markup=mini_app_launch_keyboard(app_url.rstrip("/"), "home"),
+            )
+        else:
+            await answer(
+                message,
+                "Приложение пока недоступно: не настроен HTTPS адрес.",
+                reply_markup=MAIN_MENU,
+            )
+        return
     if action == "menu":
         await answer(message, "Выберите действие:", reply_markup=MAIN_MENU)
         return
@@ -362,11 +380,17 @@ async def lesson(callback: CallbackQuery) -> None:
                 f"{'✅' if item['done'] else '▫️'} {item['title']} ({item['minutes']} мин.)"
             )
         lines.append(f"Осталось заданий: {data['remaining']}")
+        app_url = get_settings().webhook_base_url or ""
         if callback.message:
             await callback.message.answer(
-                "\n".join(lines), reply_markup=lesson_tasks_keyboard(
-                    [item for item in data["tasks"] if item["available"]]
-                )
+                "\n".join(lines),
+                reply_markup=(
+                    mini_app_launch_keyboard(app_url.rstrip("/"), "lesson")
+                    if app_url.startswith("https://")
+                    else lesson_tasks_keyboard(
+                        [item for item in data["tasks"] if item["available"]]
+                    )
+                ),
             )
 
 
@@ -376,6 +400,26 @@ async def complete_task_callback(callback: CallbackQuery) -> None:
     with SessionLocal() as session:
         uid = owner_id(callback.from_user)
         day = current_day(session, uid)
+        week = session.scalar(
+            select(CourseWeek).where(CourseWeek.week_number == min(30, (day - 1) // 7 + 1))
+        )
+        if week is not None:
+            app_url = get_settings().webhook_base_url or ""
+            await callback.answer(
+                "Сначала выполните упражнения в приложении.", show_alert=True
+            )
+            if callback.message:
+                await callback.message.answer(
+                    "Курс засчитывает слова после ответов в тренажёре. Нажмите, чтобы открыть "
+                    "сегодняшние карточки и выполнить их; отметка по одной кнопке "
+                    "не засчитывается.",
+                    reply_markup=(
+                        mini_app_launch_keyboard(app_url.rstrip("/"), "words")
+                        if app_url.startswith("https://")
+                        else BACK
+                    ),
+                )
+            return
         if not complete_task(session, uid, day, key):
             await callback.answer("Не удалось отметить этот блок.", show_alert=True)
             return
@@ -404,10 +448,17 @@ async def progress(callback: CallbackQuery) -> None:
 async def words(callback: CallbackQuery) -> None:
     await callback.answer()
     if callback.message:
+        app_url = get_settings().webhook_base_url or ""
+        if app_url.startswith("https://"):
+            await callback.message.answer(
+                "Откройте раздел Words: там доступны сегодняшние карточки, повторение по "
+                "расписанию и поиск по словам и выражениям.",
+                reply_markup=mini_app_launch_keyboard(app_url.rstrip("/"), "words"),
+            )
+            return
         await callback.message.answer(
-            "Отправьте английское слово и перевод через тире, например: "
-            "<code>apple — яблоко</code>.\n"
-            "Чтобы найти слово, нажмите «🔎 Найти слово» в клавиатуре.",
+            "Тренажёр курса пока недоступен. Вы можете добавить личное слово сообщением "
+            "<code>apple — яблоко</code> или воспользоваться кнопкой поиска.",
             parse_mode="HTML",
             reply_markup=BACK,
         )
@@ -454,6 +505,15 @@ async def add_personal_word(message: Message) -> None:
 
 @router.callback_query(F.data == "review")
 async def review(callback: CallbackQuery) -> None:
+    app_url = get_settings().webhook_base_url or ""
+    if app_url.startswith("https://"):
+        await callback.answer()
+        if callback.message:
+            await callback.message.answer(
+                "Повторение и интервалы 1/3/7/14/30 дней находятся в разделе Words приложения.",
+                reply_markup=mini_app_launch_keyboard(app_url.rstrip("/"), "words"),
+            )
+        return
     from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
     await callback.answer()
@@ -524,7 +584,14 @@ async def review_answer_callback(callback: CallbackQuery) -> None:
             await callback.answer("Слово недоступно.")
             return
         correct = answer_raw == "1"
-        record_review(session, word, correct)
+        record_review_for_owner(session, word, owner_id(callback.from_user), correct)
+        if word.source_key is not None:
+            mark_course_day_reviewed(
+                session,
+                owner_id(callback.from_user),
+                current_day(session, owner_id(callback.from_user)),
+                word,
+            )
         review_session.cursor += 1
         session.add(
             Activity(
@@ -587,7 +654,7 @@ async def quiz(callback: CallbackQuery) -> None:
         if app_url.startswith("https://"):
             await callback.message.answer(
                 "Тесты проходят внутри приложения.",
-                reply_markup=mini_app_launch_keyboard(app_url),
+                reply_markup=mini_app_launch_keyboard(app_url, "practice"),
             )
         else:
             await callback.message.answer("Приложение пока недоступно: не настроен HTTPS URL.")
@@ -692,7 +759,7 @@ async def exam(callback: CallbackQuery) -> None:
         if app_url.startswith("https://"):
             await callback.message.answer(
                 "Экзамены проходят в приложении в одной сохранённой сессии.",
-                reply_markup=mini_app_launch_keyboard(app_url),
+                reply_markup=mini_app_launch_keyboard(app_url, "exam"),
             )
         else:
             await callback.message.answer("Приложение пока недоступно: не настроен HTTPS URL.")

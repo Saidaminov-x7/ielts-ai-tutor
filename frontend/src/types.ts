@@ -36,8 +36,15 @@ export interface NotificationSettings {
   timezone: string
 }
 
+export interface CourseResetResult {
+  completed_days: 0
+  current_day: 1
+  streak: 0
+}
+
 export interface Bootstrap {
   user: { telegram_id: number }
+  gemini_configured: boolean
   dashboard: {
     day: number
     week: number
@@ -116,6 +123,16 @@ export interface VocabularyWord {
 export interface VocabularyLibrary {
   items: VocabularyWord[]
   count: number
+}
+
+export interface VocabularyExample {
+  english: string
+  translation: string
+}
+
+export interface VocabularyExamples {
+  items: VocabularyExample[]
+  cached: boolean
 }
 
 export interface RoadmapWeek {

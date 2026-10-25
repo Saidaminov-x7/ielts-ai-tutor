@@ -1,0 +1,33 @@
+{
+  "contract": "IELTS Telegram Mini App redesign: minimalist and clear learning UI across Today, Lesson, Practice, Exam, Words, Progress, Settings, and Writing; preserve existing API/auth/data/learning behavior. Shared 960px max width, common gutters/spacing, responsive six-tab nav. Existing UI locale is English; Russian appears only in study content.",
+  "targetViewports": ["320x844", "390x844", "768x900", "1280x900"],
+  "accessibility": {
+    "status": "pass",
+    "evidence": "Local Chromium keyboard Tab reached an activity button with visible 3px focus outline; mobile navigation targets measured >=53x55px; dark primary button text contrast measured 7.17:1. Screen readers and actual Telegram WebView were not tested."
+  },
+  "responsive": {
+    "status": "pass",
+    "evidence": "Isolated local Chromium with mock data: no horizontal overflow at 320, 375, 390, 768, 1280, 1440; header and content edges aligned; final content clears fixed nav by 45px at 320 and 33px at 390."
+  },
+  "contentStates": {
+    "loading": {"status": "pass", "evidence": "Local mock delayed bootstrap by 900ms; the loading block appeared before the response, then Today loaded. Screenshot: loading-390x844.png."},
+    "empty": {"status": "pass", "evidence": "Mocked course-not-imported screen clearly states course materials are not loaded and offers View lesson plan; Progress empty state also rendered."},
+    "error": {"status": "pass", "evidence": "Local mock returned 503 once; the specific error and Try again appeared, and retry recovered with a successful bootstrap. Screenshot: error-retry-390x844.png."},
+    "partial": {"status": "pass", "evidence": "Mocked weekly-only source showed that daily prompts are not included. Screenshot: partial-course-390x844.png."},
+    "success": {"status": "pass", "evidence": "Mocked quiz and weekly exam showed results; consented mocked Writing review showed feedback. No real AI/API call was made."},
+    "permission": {"status": "pass", "evidence": "A local browser with no Telegram initData showed the Open IELTS from Telegram access gate. Screenshot: permission-gate-390x844.png. Real signed initData validation is not tested."}
+  },
+  "renderedEvidence": [
+    {"viewport": "320x844", "artifact": "responsive-final-320x844-light.png", "observation": "Today at narrow mobile width; no horizontal overflow."},
+    {"viewport": "390x844", "artifact": "today-mobile-390x844.png", "observation": "Today summary, clear lesson CTA, routine cards, and fixed mobile navigation."},
+    {"viewport": "768x900", "artifact": "responsive-final-768x900-light.png", "observation": "Tablet layout with aligned content and no horizontal overflow."},
+    {"viewport": "1280x900", "artifact": "responsive-final-1280x900-dark.png", "observation": "Desktop dark theme with legible primary action and aligned sidebar/content."},
+    {"viewport": "390x844", "artifact": "home-390x844.png", "observation": "Words screen with search, course library, examples action, tutor question form, and bottom navigation."},
+    {"viewport": "390x844", "artifact": "writing-route-390x844.png", "observation": "Writing screen after local mocked feedback and successful return navigation."},
+    {"viewport": "390x844", "artifact": "empty-course-390x844.png", "observation": "Honest course-material empty state with an available next action."},
+    {"viewport": "390x844", "artifact": "loading-390x844.png", "observation": "Stable loading block displayed while mocked bootstrap was delayed."},
+    {"viewport": "390x844", "artifact": "error-retry-390x844.png", "observation": "Service error with Try again recovery action."},
+    {"viewport": "390x844", "artifact": "partial-course-390x844.png", "observation": "Weekly-only course source explains missing daily prompts."},
+    {"viewport": "390x844", "artifact": "permission-gate-390x844.png", "observation": "No Telegram launch data displays access boundary and safe next action."}
+  ]
+}
